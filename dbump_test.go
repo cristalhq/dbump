@@ -19,20 +19,20 @@ func TestLoadMigrations(t *testing.T) {
 	}{
 		{
 			[]*Migration{
-				&Migration{ID: 2},
-				&Migration{ID: 1},
+				{ID: 2},
+				{ID: 1},
 			},
 			[]*Migration{
-				&Migration{ID: 1},
-				&Migration{ID: 2},
+				{ID: 1},
+				{ID: 2},
 			},
 			nil,
 		},
 
 		{
 			[]*Migration{
-				&Migration{ID: 3},
-				&Migration{ID: 1},
+				{ID: 3},
+				{ID: 1},
 			},
 			nil,
 			errors.New("missing migration number: 2 (have 3)"),
@@ -40,9 +40,9 @@ func TestLoadMigrations(t *testing.T) {
 
 		{
 			[]*Migration{
-				&Migration{ID: 2, Name: "mig2"},
-				&Migration{ID: 2, Name: "mig2fix"},
-				&Migration{ID: 1},
+				{ID: 2, Name: "mig2"},
+				{ID: 2, Name: "mig2fix"},
+				{ID: 1},
 			},
 			nil,
 			errors.New("duplicate migration number: 2 (mig2)"),
@@ -62,19 +62,19 @@ func TestLoadMigrations(t *testing.T) {
 }
 
 var testdataMigrations = []*Migration{
-	&Migration{
+	{
 		ID:       1,
 		Name:     `0001_init.sql`,
 		Apply:    `SELECT 1;`,
 		Rollback: `SELECT 10;`,
 	},
-	&Migration{
+	{
 		ID:       2,
 		Name:     `0002_another.sql`,
 		Apply:    `SELECT 2;`,
 		Rollback: `SELECT 20;`,
 	},
-	&Migration{
+	{
 		ID:       3,
 		Name:     `0003_even-better.sql`,
 		Apply:    `SELECT 3;`,

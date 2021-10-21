@@ -3,9 +3,12 @@ package dbump
 import (
 	"io/fs"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 )
+
+var migrationRE = regexp.MustCompile(`^(\d+)_.+\.sql$`)
 
 type fileSys interface {
 	fs.ReadDirFS

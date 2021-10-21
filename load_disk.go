@@ -3,11 +3,8 @@ package dbump
 import (
 	"io/fs"
 	"os"
-	"regexp"
 	"strings"
 )
-
-var migrationRE = regexp.MustCompile(`^(\d+)_.+\.sql$`)
 
 // DiskLoader can load migrations from disk/OS.
 type DiskLoader struct {
@@ -28,14 +25,17 @@ func (dl *DiskLoader) Load() ([]*Migration, error) {
 
 type osFS struct{}
 
+// no-op just to implement dbump.fileSys interface.
 func (osFS) Open(name string) (fs.File, error) {
 	panic("unreachable")
 }
 
+// ReadDir implements dbump.fileSys interface.
 func (osFS) ReadDir(name string) ([]os.DirEntry, error) {
 	return os.ReadDir(name)
 }
 
+// ReadFile implements dbump.fileSys interface.
 func (osFS) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(name)
 }
