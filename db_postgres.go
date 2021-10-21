@@ -19,14 +19,14 @@ func NewMigratorPostgres(db *sql.DB) *MigratorPostgres {
 	}
 }
 
-// Lock is a method for Migrator interface.
-func (pg *MigratorPostgres) Lock(ctx context.Context) error {
+// LockDB is a method for Migrator interface.
+func (pg *MigratorPostgres) LockDB(ctx context.Context) error {
 	_, err := pg.db.ExecContext(ctx, "SELECT pg_advisory_lock($1)", lockNum)
 	return err
 }
 
-// Unlock is a method for Migrator interface.
-func (pg *MigratorPostgres) Unlock(ctx context.Context) error {
+// UnlockDB is a method for Migrator interface.
+func (pg *MigratorPostgres) UnlockDB(ctx context.Context) error {
 	_, err := pg.db.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", lockNum)
 	return err
 }

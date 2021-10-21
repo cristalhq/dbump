@@ -14,8 +14,8 @@ const lockNum int64 = 777_777_777
 
 // Migrator represents DB over which we will run migration queries.
 type Migrator interface {
-	Lock(ctx context.Context) error
-	Unlock(ctx context.Context) error
+	LockDB(ctx context.Context) error
+	UnlockDB(ctx context.Context) error
 
 	Version(ctx context.Context) (version int, err error)
 	SetVersion(ctx context.Context, version int) error
@@ -68,13 +68,13 @@ func loadMigrations(ms []*Migration, err error) ([]*Migration, error) {
 }
 
 func runMigration(ctx context.Context, m Migrator, ms []*Migration) error {
-	if err := m.Lock(ctx); err != nil {
+	if err := m.LockDB(ctx); err != nil {
 		return err
 	}
 
 	var err error
 	defer func() {
-		if errUnlock := m.Unlock(ctx); err == nil && errUnlock != nil {
+		if errUnlock := m.UnlockDB(ctx); err == nil && errUnlock != nil {
 			err = errUnlock
 		}
 	}()
@@ -91,10 +91,11 @@ func runLockedMigration(ctx context.Context, m Migrator, ms []*Migration) error 
 
 	// TODO: configure
 	targetVersion := len(ms)
-	switch {
-	case targetVersion < 0 || len(ms) < targetVersion:
-		fallthrough
-	case currentVersion < 0 || len(ms) < currentVersion:
+	ok := targetVersion < 0 ||
+		currentVersion < 0 ||
+		len(ms) < targetVersion ||
+		len(ms) < currentVersion
+	if !ok {
 		return fmt.Errorf("target version %d is outside of range 0..%d ", targetVersion, len(ms))
 	}
 

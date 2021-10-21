@@ -19,14 +19,14 @@ func NewMigratorClickHouse(db *sql.DB) *MigratorClickHouse {
 	}
 }
 
-// Lock is a method for Migrator interface.
-func (ch *MigratorClickHouse) Lock(ctx context.Context) error {
+// LoLockDBck is a method for Migrator interface.
+func (ch *MigratorClickHouse) LockDB(ctx context.Context) error {
 	// TODO: currently no-op
 	return nil
 }
 
-// Unlock is a method for Migrator interface.
-func (ch *MigratorClickHouse) Unlock(ctx context.Context) error {
+// UnlockDB is a method for Migrator interface.
+func (ch *MigratorClickHouse) UnlockDB(ctx context.Context) error {
 	// TODO: currently no-op
 	return nil
 }

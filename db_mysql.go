@@ -19,14 +19,14 @@ func NewMigratorMySQL(db *sql.DB) *MigratorMySQL {
 	}
 }
 
-// Lock is a method for Migrator interface.
-func (my *MigratorMySQL) Lock(ctx context.Context) error {
+// LockDB is a method for Migrator interface.
+func (my *MigratorMySQL) LockDB(ctx context.Context) error {
 	_, err := my.db.ExecContext(ctx, `SELECT GET_LOCK(?, 10)`, lockNum)
 	return err
 }
 
-// Unlock is a method for Migrator interface.
-func (my *MigratorMySQL) Unlock(ctx context.Context) error {
+// UnlockDB is a method for Migrator interface.
+func (my *MigratorMySQL) UnlockDB(ctx context.Context) error {
 	_, err := my.db.ExecContext(ctx, "SELECT RELEASE_LOCK(?)", lockNum)
 	return err
 }
