@@ -14,6 +14,7 @@ const lockNum int64 = 777_777_777
 
 // Migrator represents DB over which we will run migration queries.
 type Migrator interface {
+	Init(ctx context.Context) error
 	LockDB(ctx context.Context) error
 	UnlockDB(ctx context.Context) error
 
@@ -68,6 +69,9 @@ func loadMigrations(ms []*Migration, err error) ([]*Migration, error) {
 }
 
 func runMigration(ctx context.Context, m Migrator, ms []*Migration) error {
+	if err := m.Init(ctx); err != nil {
+		return fmt.Errorf("init: %w", err)
+	}
 	if err := m.LockDB(ctx); err != nil {
 		return fmt.Errorf("lock db: %w", err)
 	}
