@@ -37,12 +37,12 @@ type Migration struct {
 }
 
 // Run the Migrator with migration queries provided by the Loader.
-func Run(ctx context.Context, m Migrator, l Loader) error {
-	ms, err := loadMigrations(l.Load())
+func Run(ctx context.Context, migrator Migrator, loader Loader) error {
+	migrations, err := loadMigrations(loader.Load())
 	if err != nil {
-		return err
+		return fmt.Errorf("load migrations: %w", err)
 	}
-	return runMigration(ctx, m, ms)
+	return runMigration(ctx, migrator, migrations)
 }
 
 func loadMigrations(ms []*Migration, err error) ([]*Migration, error) {
@@ -69,34 +69,38 @@ func loadMigrations(ms []*Migration, err error) ([]*Migration, error) {
 
 func runMigration(ctx context.Context, m Migrator, ms []*Migration) error {
 	if err := m.LockDB(ctx); err != nil {
-		return err
+		return fmt.Errorf("lock db: %w", err)
 	}
 
 	var err error
 	defer func() {
 		if errUnlock := m.UnlockDB(ctx); err == nil && errUnlock != nil {
-			err = errUnlock
+			err = fmt.Errorf("unlock db: %w", errUnlock)
 		}
 	}()
 
-	err = runLockedMigration(ctx, m, ms)
+	err = runMigrationExclusive(ctx, m, ms)
 	return err
 }
 
-func runLockedMigration(ctx context.Context, m Migrator, ms []*Migration) error {
+func runMigrationExclusive(ctx context.Context, m Migrator, ms []*Migration) error {
 	currentVersion, err := m.Version(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("get version: %w", err)
+	}
+
+	targetVersion := len(ms)
+	if currentVersion == targetVersion {
+		return nil
 	}
 
 	// TODO: configure
-	targetVersion := len(ms)
-	ok := targetVersion < 0 ||
+	notOk := targetVersion < 0 ||
 		currentVersion < 0 ||
-		len(ms) < targetVersion ||
+		len(ms)+1 < targetVersion ||
 		len(ms) < currentVersion
-	if !ok {
-		return fmt.Errorf("target version %d is outside of range 0..%d ", targetVersion, len(ms))
+	if notOk {
+		return fmt.Errorf("target version %d is outside of range [0..%d]", targetVersion, len(ms))
 	}
 
 	direction := 1
@@ -116,11 +120,11 @@ func runLockedMigration(ctx context.Context, m Migrator, ms []*Migration) error 
 		}
 
 		if err := m.Exec(ctx, query); err != nil {
-			return err
+			return fmt.Errorf("exec: %w", err)
 		}
 
 		if err := m.SetVersion(ctx, sequence); err != nil {
-			return err
+			return fmt.Errorf("set version: %w", err)
 		}
 		currentVersion += direction
 	}
