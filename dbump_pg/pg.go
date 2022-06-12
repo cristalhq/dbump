@@ -1,9 +1,8 @@
-package dbump_postgres
+package dbump_pg
 
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"github.com/cristalhq/dbump"
 )
@@ -68,20 +67,6 @@ SET created_at = NOW();`
 
 // Exec is a method for Migrator interface.
 func (pg *Migrator) Exec(ctx context.Context, query string, args ...interface{}) error {
-	tx, err := pg.conn.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx, query, args...)
-	if err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("exec query: %w", err)
-	}
-
-	if err = tx.Commit(); err != nil {
-		return fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return nil
+	_, err := pg.conn.ExecContext(ctx, query, args...)
+	return err
 }

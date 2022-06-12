@@ -66,8 +66,6 @@ SET created_at = NOW();`
 
 // Exec is a method for Migrator interface.
 func (pg *Migrator) Exec(ctx context.Context, query string, args ...interface{}) error {
-	return pg.conn.BeginTxFunc(ctx, pgx.TxOptions{}, func(tx pgx.Tx) error {
-		_, err := tx.Exec(ctx, query, args...)
-		return err
-	})
+	_, err := pg.conn.Exec(ctx, query, args...)
+	return err
 }
