@@ -4,6 +4,7 @@
 [![pkg-img]][pkg-url]
 [![reportcard-img]][reportcard-url]
 [![coverage-img]][coverage-url]
+[![version-img]][version-url]
 
 Go database schema migrator library (See [dbumper](https://github.com/cristalhq/dbumper) tool).
 
@@ -43,3 +44,5 @@ See [these docs][pkg-url].
 [reportcard-url]: https://goreportcard.com/report/cristalhq/dbump
 [coverage-img]: https://codecov.io/gh/cristalhq/dbump/branch/main/graph/badge.svg
 [coverage-url]: https://codecov.io/gh/cristalhq/dbump
+[version-img]: https://img.shields.io/github/v/release/cristalhq/dbump
+[version-url]: https://github.com/cristalhq/dbump/releases
