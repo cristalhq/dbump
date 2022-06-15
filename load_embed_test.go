@@ -10,7 +10,7 @@ import (
 var testdata embed.FS
 
 func TestEmbedLoader(t *testing.T) {
-	loader := NewEmbedLoader(testdata, "testdata")
+	loader := NewFSLoader(testdata, "testdata")
 	migs, err := loader.Load()
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +30,7 @@ func TestEmbedLoader(t *testing.T) {
 }
 
 func TestEmbedLoaderSubdir(t *testing.T) {
-	loader := NewEmbedLoader(testdata, "testdata/subdir")
+	loader := NewFSLoader(testdata, "testdata/subdir")
 	migs, err := loader.Load()
 	if err != nil {
 		t.Fatal(err)

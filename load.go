@@ -1,7 +1,6 @@
 package dbump
 
 import (
-	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -10,12 +9,7 @@ import (
 
 var migrationRE = regexp.MustCompile(`^(\d+)_.+\.sql$`)
 
-type fileSys interface {
-	fs.ReadDirFS
-	fs.ReadFileFS
-}
-
-func loadMigrationsFromFS(fs fileSys, path string) ([]*Migration, error) {
+func loadMigrationsFromFS(fs FS, path string) ([]*Migration, error) {
 	files, err := fs.ReadDir(path)
 	if err != nil {
 		return nil, err
@@ -42,7 +36,7 @@ func loadMigrationsFromFS(fs fileSys, path string) ([]*Migration, error) {
 	return migs, nil
 }
 
-func loadMigrationFromFS(fs fileSys, path, id, name string) (*Migration, error) {
+func loadMigrationFromFS(fs FS, path, id, name string) (*Migration, error) {
 	n, err := strconv.ParseInt(id, 10, 32)
 	if err != nil {
 		return nil, err

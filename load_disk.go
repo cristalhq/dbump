@@ -25,17 +25,17 @@ func (dl *DiskLoader) Load() ([]*Migration, error) {
 
 type osFS struct{}
 
-// no-op just to implement dbump.fileSys interface.
+// Open implements dbump.FS interface.
 func (osFS) Open(name string) (fs.File, error) {
-	panic("unreachable")
+	return os.Open(name)
 }
 
-// ReadDir implements dbump.fileSys interface.
+// ReadDir implements dbump.FS interface.
 func (osFS) ReadDir(name string) ([]os.DirEntry, error) {
 	return os.ReadDir(name)
 }
 
-// ReadFile implements dbump.fileSys interface.
+// ReadFile implements dbump.FS interface.
 func (osFS) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(name)
 }
