@@ -1,11 +1,80 @@
 package dbump
 
 import (
+	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+type FS interface {
+	fs.FS
+	fs.ReadDirFS
+	fs.ReadFileFS
+}
+
+// DiskLoader can load migrations from disk/OS.
+type DiskLoader struct {
+	path string
+}
+
+// NewDiskLoader instantiates a new DiskLoader.
+func NewDiskLoader(path string) *DiskLoader {
+	return &DiskLoader{
+		path: strings.TrimRight(path, string(os.PathSeparator)),
+	}
+}
+
+// Load is a method for Loader interface.
+func (dl *DiskLoader) Load() ([]*Migration, error) {
+	return loadMigrationsFromFS(osFS{}, dl.path)
+}
+
+// FileSysLoader can load migrations from fs.FS.
+type FileSysLoader struct {
+	fs   FS
+	path string
+}
+
+// NewFileSysLoader instantiates a new FileSysLoader.
+func NewFileSysLoader(fs FS, path string) *FileSysLoader {
+	return &FileSysLoader{
+		fs:   fs,
+		path: strings.TrimRight(path, string(os.PathSeparator)),
+	}
+}
+
+// Load is a method for Loader interface.
+func (el *FileSysLoader) Load() ([]*Migration, error) {
+	return loadMigrationsFromFS(el.fs, el.path)
+}
+
+// SliceLoader loads given migrations.
+type SliceLoader struct {
+	migrations []*Migration
+}
+
+// NewSliceLoader instantiates a new SliceLoader.
+func NewSliceLoader(migrations []*Migration) *SliceLoader {
+	return &SliceLoader{
+		migrations: migrations,
+	}
+}
+
+// Load is a method for Loader interface.
+func (sl *SliceLoader) Load() ([]*Migration, error) {
+	return sl.migrations, nil
+}
+
+// AddMigration to loader.
+func (sl *SliceLoader) AddMigration(m *Migration) {
+	if m == nil {
+		panic("dbump: migration should not be nil")
+	}
+	sl.migrations = append(sl.migrations, m)
+}
 
 var migrationRE = regexp.MustCompile(`^(\d+)_.+\.sql$`)
 
@@ -66,4 +135,21 @@ func parseMigration(body []byte) *Migration {
 		Apply:    applySQL,
 		Rollback: rollbackSQL,
 	}
+}
+
+type osFS struct{}
+
+// Open implements dbump.FS interface.
+func (osFS) Open(name string) (fs.File, error) {
+	return os.Open(name)
+}
+
+// ReadDir implements dbump.FS interface.
+func (osFS) ReadDir(name string) ([]os.DirEntry, error) {
+	return os.ReadDir(name)
+}
+
+// ReadFile implements dbump.FS interface.
+func (osFS) ReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
 }
