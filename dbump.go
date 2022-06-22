@@ -2,6 +2,7 @@ package dbump
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 )
@@ -9,10 +10,28 @@ import (
 // MigrationDelimiter separates apply and rollback queries inside a migration step/file.
 const MigrationDelimiter = `--- apply above / rollback below ---`
 
-// to prevent multiple migrations running at the same time
-const lockNum int64 = 777_777_777
+// Config for the migration process. Is used only by Run function.
+type Config struct {
+	// Migrator represents a database.
+	Migrator Migrator
 
-// Migrator represents DB over which we will run migration queries.
+	// Loader of migrations.
+	Loader Loader
+
+	// UseForce to get a lock on a database.
+	UseForce bool
+
+	// Mode of the migration.
+	// Default is zero (ModeNotSet) which is an incorrect value.
+	// Set mode explicetly to show what should be done.
+	Mode MigratorMode
+
+	// ZigZag migration. Useful in tests.
+	// Does apply-rollback-apply/rollback-apply-rollback of each migration.
+	ZigZag bool
+}
+
+// Migrator represents database over which we will run migrations.
 type Migrator interface {
 	Init(ctx context.Context) error
 	LockDB(ctx context.Context) error
@@ -24,12 +43,12 @@ type Migrator interface {
 	Exec(ctx context.Context, query string, args ...interface{}) error
 }
 
-// Loader returns migrations to be applied on a DB.
+// Loader returns migrations to be applied on a database.
 type Loader interface {
 	Load() ([]*Migration, error)
 }
 
-// Migration represents migration step that will be runned on DB.
+// Migration represents migration step that will be runned on a database.
 type Migration struct {
 	ID         int         // ID of the migration, unique, positive, starts from 1.
 	Name       string      // Name of the migration
@@ -41,22 +60,63 @@ type Migration struct {
 	isQuery bool // shortcut for the type of migration (query or func)
 }
 
-type MigrationFn func(db DB) error
+// MigrationFn ...
+type MigrationFn func(ctx context.Context, db DB) error
 
+// DB ...
 type DB interface {
 	Exec(ctx context.Context, query string, args ...interface{}) error
 }
 
+// MigratorMode to change migration flow.
+type MigratorMode int
+
+const (
+	ModeNotSet MigratorMode = iota
+	ModeUp
+	ModeDown
+	ModeUpOne
+	ModeDownOne
+	modeMaxPossible
+)
+
 // Run the Migrator with migration queries provided by the Loader.
-func Run(ctx context.Context, migrator Migrator, loader Loader) error {
-	migrations, err := loadMigrations(loader.Load())
-	if err != nil {
-		return fmt.Errorf("load migrations: %w", err)
+func Run(ctx context.Context, config Config) error {
+	switch {
+	case config.Migrator == nil:
+		return errors.New("migrator cannot be nil")
+	case config.Loader == nil:
+		return errors.New("loader cannot be nil")
+	case config.Mode == ModeNotSet:
+		return errors.New("mode not set")
+	case config.Mode >= modeMaxPossible:
+		return fmt.Errorf("incorrect mode provided: %d", config.Mode)
 	}
-	return runMigration(ctx, migrator, migrations)
+
+	m := mig{
+		Config:   config,
+		Migrator: config.Migrator,
+		Loader:   config.Loader,
+	}
+	return m.run(ctx)
 }
 
-func loadMigrations(ms []*Migration, err error) ([]*Migration, error) {
+type mig struct {
+	Config
+	Migrator
+	Loader
+}
+
+func (m *mig) run(ctx context.Context) error {
+	migrations, err := m.load()
+	if err != nil {
+		return fmt.Errorf("load: %w", err)
+	}
+	return m.runMigration(ctx, migrations)
+}
+
+func (m *mig) load() ([]*Migration, error) {
+	ms, err := m.Load()
 	if err != nil {
 		return nil, err
 	}
@@ -81,12 +141,20 @@ func loadMigrations(ms []*Migration, err error) ([]*Migration, error) {
 	return ms, nil
 }
 
-func runMigration(ctx context.Context, m Migrator, ms []*Migration) error {
+func (m *mig) runMigration(ctx context.Context, ms []*Migration) error {
 	if err := m.Init(ctx); err != nil {
 		return fmt.Errorf("init: %w", err)
 	}
 	if err := m.LockDB(ctx); err != nil {
-		return fmt.Errorf("lock db: %w", err)
+		if !m.UseForce {
+			return fmt.Errorf("lock db: %w", err)
+		}
+		if err := m.UnlockDB(ctx); err != nil {
+			return fmt.Errorf("force unlock db: %w", err)
+		}
+		if err := m.LockDB(ctx); err != nil {
+			return fmt.Errorf("force lock db: %w", err)
+		}
 	}
 
 	var err error
@@ -96,42 +164,33 @@ func runMigration(ctx context.Context, m Migrator, ms []*Migration) error {
 		}
 	}()
 
-	err = runMigrationExclusive(ctx, m, ms)
+	err = m.runMigrationLocked(ctx, ms)
 	return err
 }
 
-func runMigrationExclusive(ctx context.Context, m Migrator, ms []*Migration) error {
-	currentVersion, err := m.Version(ctx)
+func (m *mig) runMigrationLocked(ctx context.Context, ms []*Migration) error {
+	curr, target, err := m.getCurrAndTargetVersions(ctx, len(ms))
 	if err != nil {
-		return fmt.Errorf("get version: %w", err)
+		return err
 	}
 
-	targetVersion := len(ms)
-	if currentVersion == targetVersion {
+	if curr == target {
 		return nil
 	}
 
-	// TODO: configure
-	notOk := targetVersion < 0 ||
-		currentVersion < 0 ||
-		len(ms)+1 < targetVersion ||
-		len(ms) < currentVersion
-	if notOk {
-		return fmt.Errorf("target version %d is outside of range [0..%d]", targetVersion, len(ms))
-	}
-
 	direction := 1
-	if currentVersion > targetVersion {
+	if curr > target {
 		direction = -1
 	}
 
-	for currentVersion != targetVersion {
-		current := ms[currentVersion]
+	// TODO(oleg): do ZigZag
+	for curr != target {
+		current := ms[curr]
 		sequence := current.ID
 		query, queryFn := current.Apply, current.ApplyFn
 
 		if direction == -1 {
-			current = ms[currentVersion-1]
+			current = ms[curr-1]
 			sequence = current.ID - 1
 			query, queryFn = current.Rollback, current.RollbackFn
 		}
@@ -139,7 +198,7 @@ func runMigrationExclusive(ctx context.Context, m Migrator, ms []*Migration) err
 		if current.isQuery {
 			err = m.Exec(ctx, query)
 		} else {
-			err = queryFn(m)
+			err = queryFn(ctx, m)
 		}
 		if err != nil {
 			return fmt.Errorf("exec: %w", err)
@@ -148,7 +207,47 @@ func runMigrationExclusive(ctx context.Context, m Migrator, ms []*Migration) err
 		if err := m.SetVersion(ctx, sequence); err != nil {
 			return fmt.Errorf("set version: %w", err)
 		}
-		currentVersion += direction
+		curr += direction
 	}
 	return nil
+}
+
+func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (curr, target int, err error) {
+	curr, err = m.Version(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("get version: %w", err)
+	}
+	if curr < 0 {
+		return 0, 0, fmt.Errorf("version is negative: %d (must be in range [0..)", curr)
+	}
+
+	switch m.Config.Mode {
+	case ModeUp:
+		target = migrations
+		if curr > target {
+			return 0, 0, errors.New("current is greater than target")
+		}
+
+	case ModeDown:
+		if curr > migrations {
+			return 0, 0, errors.New("current is greater than migrations count")
+		}
+		target = 0
+
+	case ModeUpOne:
+		target = curr + 1
+		if target > migrations {
+			return 0, 0, errors.New("target is greater than migrations count")
+		}
+
+	case ModeDownOne:
+		if curr > migrations {
+			return 0, 0, errors.New("current is greater than migrations count")
+		}
+		target = curr - 1
+
+	default:
+		panic("unreachable")
+	}
+	return curr, target, nil
 }

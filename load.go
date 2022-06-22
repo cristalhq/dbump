@@ -119,10 +119,12 @@ func loadMigrationFromFS(fs FS, path, id, name string) (*Migration, error) {
 	m := parseMigration(body)
 	m.ID = int(n)
 	m.Name = name
+	m.isQuery = true
 	return m, nil
 }
 
 func parseMigration(body []byte) *Migration {
+	// TODO(oleg): get name from magic comment
 	parts := strings.SplitN(string(body), MigrationDelimiter, 2)
 	applySQL := strings.TrimSpace(parts[0])
 
