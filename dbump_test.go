@@ -7,21 +7,57 @@ import (
 	"testing"
 )
 
+func TestRunCheck(t *testing.T) {
+	testCases := []struct {
+		testName string
+		cfg      Config
+	}{
+		{
+			testName: "migrator is nil",
+			cfg:      Config{},
+		},
+		{
+			testName: "loader is nil",
+			cfg: Config{
+				Migrator: &MockMigrator{},
+			},
+		},
+		{
+			testName: "mode is ModeNotSet",
+			cfg: Config{
+				Migrator: &MockMigrator{},
+				Loader:   NewSliceLoader(nil),
+			},
+		},
+		{
+			testName: "bad mode",
+			cfg: Config{
+				Migrator: &MockMigrator{},
+				Loader:   NewSliceLoader(nil),
+				Mode:     modeMaxPossible + 1,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		err := Run(context.Background(), tc.cfg)
+		if err == nil {
+			t.Fail()
+		}
+	}
+}
+
+func TestLoaderError(t *testing.T) {
+}
+
 func TestMigrateUp(t *testing.T) {
 	wantLog := []string{
-		"init",
-		"lockdb",
-		"getversion",
-		"exec", "SELECT 1;", "[]",
-		"setversion", "1",
-		"exec", "SELECT 2;", "[]",
-		"setversion", "2",
-		"exec", "SELECT 3;", "[]",
-		"setversion", "3",
-		"exec", "SELECT 4;", "[]",
-		"setversion", "4",
-		"exec", "SELECT 5;", "[]",
-		"setversion", "5",
+		"init", "lockdb", "getversion",
+		"exec", "SELECT 1;", "[]", "setversion", "1",
+		"exec", "SELECT 2;", "[]", "setversion", "2",
+		"exec", "SELECT 3;", "[]", "setversion", "3",
+		"exec", "SELECT 4;", "[]", "setversion", "4",
+		"exec", "SELECT 5;", "[]", "setversion", "5",
 		"unlockdb",
 	}
 
@@ -39,10 +75,7 @@ func TestMigrateUp(t *testing.T) {
 
 func TestMigrateUpWhenFull(t *testing.T) {
 	wantLog := []string{
-		"init",
-		"lockdb",
-		"getversion",
-		"unlockdb",
+		"init", "lockdb", "getversion", "unlockdb",
 	}
 
 	mm := &MockMigrator{
@@ -61,21 +94,38 @@ func TestMigrateUpWhenFull(t *testing.T) {
 	mustEqual(t, mm.log, wantLog)
 }
 
+func TestMigrateUpOne(t *testing.T) {
+	currVersion := 3
+	wantLog := []string{
+		"init", "lockdb", "getversion",
+		"exec", "SELECT 4;", "[]", "setversion", "4",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return currVersion, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUpOne,
+	}
+
+	err := Run(context.Background(), cfg)
+	failIfErr(t, err)
+	mustEqual(t, mm.log, wantLog)
+}
+
 func TestMigrateDown(t *testing.T) {
 	wantLog := []string{
-		"init",
-		"lockdb",
-		"getversion",
-		"exec", "SELECT 50;", "[]",
-		"setversion", "4",
-		"exec", "SELECT 40;", "[]",
-		"setversion", "3",
-		"exec", "SELECT 30;", "[]",
-		"setversion", "2",
-		"exec", "SELECT 20;", "[]",
-		"setversion", "1",
-		"exec", "SELECT 10;", "[]",
-		"setversion", "0",
+		"init", "lockdb", "getversion",
+		"exec", "SELECT 50;", "[]", "setversion", "4",
+		"exec", "SELECT 40;", "[]", "setversion", "3",
+		"exec", "SELECT 30;", "[]", "setversion", "2",
+		"exec", "SELECT 20;", "[]", "setversion", "1",
+		"exec", "SELECT 10;", "[]", "setversion", "0",
 		"unlockdb",
 	}
 
@@ -97,10 +147,7 @@ func TestMigrateDown(t *testing.T) {
 
 func TestMigrateDownWhenEmpty(t *testing.T) {
 	wantLog := []string{
-		"init",
-		"lockdb",
-		"getversion",
-		"unlockdb",
+		"init", "lockdb", "getversion", "unlockdb",
 	}
 
 	mm := &MockMigrator{
@@ -119,17 +166,36 @@ func TestMigrateDownWhenEmpty(t *testing.T) {
 	mustEqual(t, mm.log, wantLog)
 }
 
-func TestForce(t *testing.T) {
+func TestMigrateDownOne(t *testing.T) {
+	currVersion := 3
 	wantLog := []string{
-		"init",
-		"lockdb",
+		"init", "lockdb", "getversion",
+		"exec", "SELECT 30;", "[]", "setversion", "2",
 		"unlockdb",
-		"lockdb",
-		"getversion",
-		"exec", "SELECT 4;", "[]",
-		"setversion", "4",
-		"exec", "SELECT 5;", "[]",
-		"setversion", "5",
+	}
+
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return currVersion, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeDownOne,
+	}
+
+	err := Run(context.Background(), cfg)
+	failIfErr(t, err)
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestUseForce(t *testing.T) {
+	currVersion := 3
+	wantLog := []string{
+		"init", "lockdb", "unlockdb", "lockdb", "getversion",
+		"exec", "SELECT 4;", "[]", "setversion", "4",
+		"exec", "SELECT 5;", "[]", "setversion", "5",
 		"unlockdb",
 	}
 
@@ -147,7 +213,7 @@ func TestForce(t *testing.T) {
 			return nil
 		},
 		VersionFn: func(ctx context.Context) (version int, err error) {
-			return 3, nil
+			return currVersion, nil
 		},
 	}
 	cfg := Config{
@@ -160,6 +226,238 @@ func TestForce(t *testing.T) {
 	err := Run(context.Background(), cfg)
 	failIfErr(t, err)
 	mustEqual(t, mm.log, wantLog)
+}
+
+func TestZigZag(t *testing.T) {
+	wantLog := []string{
+		"init", "lockdb", "getversion",
+		"exec", "SELECT 1;", "[]", "setversion", "1",
+		"exec", "SELECT 10;", "[]", "setversion", "0",
+		"exec", "SELECT 1;", "[]", "setversion", "1",
+
+		"exec", "SELECT 2;", "[]", "setversion", "2",
+		"exec", "SELECT 20;", "[]", "setversion", "1",
+		"exec", "SELECT 2;", "[]", "setversion", "2",
+
+		"exec", "SELECT 3;", "[]", "setversion", "3",
+		"exec", "SELECT 30;", "[]", "setversion", "2",
+		"exec", "SELECT 3;", "[]", "setversion", "3",
+
+		"exec", "SELECT 4;", "[]", "setversion", "4",
+		"exec", "SELECT 40;", "[]", "setversion", "3",
+		"exec", "SELECT 4;", "[]", "setversion", "4",
+
+		"exec", "SELECT 5;", "[]", "setversion", "5",
+		"exec", "SELECT 50;", "[]", "setversion", "4",
+		"exec", "SELECT 5;", "[]", "setversion", "5",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+		ZigZag:   true,
+	}
+
+	err := Run(context.Background(), cfg)
+	failIfErr(t, err)
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnInitError(t *testing.T) {
+	wantLog := []string{"init"}
+	mm := &MockMigrator{
+		InitFn: func(ctx context.Context) error {
+			return errors.New("no access")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fail()
+	}
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnLockDB(t *testing.T) {
+	wantLog := []string{
+		"init", "lockdb",
+	}
+	mm := &MockMigrator{
+		LockDBFn: func(ctx context.Context) (err error) {
+			return errors.New("no access")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fail()
+	}
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnUnlockDB(t *testing.T) {
+	currVersion := 4
+	wantLog := []string{
+		"init", "lockdb", "getversion",
+		"exec", "SELECT 5;", "[]", "setversion", "5",
+		"unlockdb",
+	}
+	mm := &MockMigrator{
+		UnlockDBFn: func(ctx context.Context) (err error) {
+			return errors.New("no access")
+		},
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return currVersion, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fail()
+	}
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnGetVersionError(t *testing.T) {
+	wantLog := []string{
+		"init", "lockdb", "getversion", "unlockdb",
+	}
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return 0, errors.New("no access")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fail()
+	}
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnSetVersionError(t *testing.T) {
+	wantLog := []string{
+		"init", "lockdb", "getversion",
+		"exec", "SELECT 1;", "[]", "setversion", "1",
+		"unlockdb",
+	}
+	mm := &MockMigrator{
+		SetVersionFn: func(ctx context.Context, version int) error {
+			return errors.New("no access")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fail()
+	}
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnExec(t *testing.T) {
+	wantLog := []string{
+		"init", "lockdb", "getversion",
+		"exec", "SELECT 1;", "[]",
+		"unlockdb",
+	}
+	mm := &MockMigrator{
+		ExecFn: func(ctx context.Context, query string, args ...interface{}) error {
+			return errors.New("syntax error")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fail()
+	}
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnExecFunc(t *testing.T) {
+	testMigrations := make([]*Migration, len(testdataMigrations))
+	copy(testMigrations, testdataMigrations)
+
+	testMigrations[0] = &Migration{
+		ID:       1,
+		isQuery:  false,
+		Apply:    "",
+		Rollback: "",
+		ApplyFn: func(ctx context.Context, db DB) error {
+			return errors.New("nil dereference")
+		},
+		RollbackFn: func(ctx context.Context, db DB) error {
+			return errors.New("nil dereference")
+		},
+	}
+
+	wantLog := []string{
+		"init", "lockdb", "getversion", "unlockdb",
+	}
+	mm := &MockMigrator{
+		ExecFn: func(ctx context.Context, query string, args ...interface{}) error {
+			return errors.New("syntax error")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testMigrations),
+		Mode:     ModeUp,
+	}
+
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fail()
+	}
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnLoad(t *testing.T) {
+	cfg := Config{
+		Migrator: &MockMigrator{},
+		Loader: &MockLoader{
+			LoaderFn: func() ([]*Migration, error) {
+				return nil, errors.New("forgot to commit")
+			},
+		},
+		Mode: ModeUp,
+	}
+	err := Run(context.Background(), cfg)
+	if err == nil {
+		t.Fail()
+	}
 }
 
 func Test_loadMigrations(t *testing.T) {
@@ -227,16 +525,6 @@ func Test_loadMigrations(t *testing.T) {
 		mustEqual(t, err != nil, tc.wantErr != nil)
 		mustEqual(t, migs, tc.wantMigrations)
 	}
-}
-
-func TestZigZag(t *testing.T) {
-	t.SkipNow()
-	cfg := Config{
-		ZigZag: true,
-	}
-
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
 }
 
 var testdataMigrations = []*Migration{

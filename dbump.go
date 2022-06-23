@@ -141,7 +141,7 @@ func (m *mig) load() ([]*Migration, error) {
 	return ms, nil
 }
 
-func (m *mig) runMigration(ctx context.Context, ms []*Migration) error {
+func (m *mig) runMigration(ctx context.Context, ms []*Migration) (err error) {
 	if err := m.Init(ctx); err != nil {
 		return fmt.Errorf("init: %w", err)
 	}
@@ -157,7 +157,6 @@ func (m *mig) runMigration(ctx context.Context, ms []*Migration) error {
 		}
 	}
 
-	var err error
 	defer func() {
 		if errUnlock := m.UnlockDB(ctx); err == nil && errUnlock != nil {
 			err = fmt.Errorf("unlock db: %w", errUnlock)
@@ -174,46 +173,19 @@ func (m *mig) runMigrationLocked(ctx context.Context, ms []*Migration) error {
 		return err
 	}
 
-	if curr == target {
-		return nil
-	}
-
-	direction := 1
-	if curr > target {
-		direction = -1
-	}
-
-	// TODO(oleg): do ZigZag
-	for curr != target {
-		var current *Migration
-		var sequence int
-		var query string
-		var queryFn MigrationFn
-
-		switch {
-		case direction == 1:
-			current = ms[curr]
-			sequence = current.ID
-			query, queryFn = current.Apply, current.ApplyFn
-		case direction == -1:
-			current = ms[curr-1]
-			sequence = current.ID - 1
-			query, queryFn = current.Rollback, current.RollbackFn
-		}
-
-		if current.isQuery {
-			err = m.Exec(ctx, query)
+	for _, step := range m.prepareSteps(curr, target, ms) {
+		if step.IsQuery {
+			err = m.Exec(ctx, step.Query)
 		} else {
-			err = queryFn(ctx, m)
+			err = step.QueryFn(ctx, m)
 		}
 		if err != nil {
 			return fmt.Errorf("exec: %w", err)
 		}
 
-		if err := m.SetVersion(ctx, sequence); err != nil {
+		if err := m.SetVersion(ctx, step.Version); err != nil {
 			return fmt.Errorf("set version: %w", err)
 		}
-		curr += direction
 	}
 	return nil
 }
@@ -222,9 +194,6 @@ func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (cur
 	curr, err = m.Version(ctx)
 	if err != nil {
 		return 0, 0, fmt.Errorf("get version: %w", err)
-	}
-	if curr < 0 {
-		return 0, 0, fmt.Errorf("version is negative: %d (must be in range [0..)", curr)
 	}
 
 	switch m.Config.Mode {
@@ -256,4 +225,56 @@ func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (cur
 		panic("unreachable")
 	}
 	return curr, target, nil
+}
+
+func (m *mig) prepareSteps(curr, target int, ms []*Migration) []step {
+	if curr == target {
+		return nil
+	}
+	steps := []step{}
+
+	direction := 1
+	if curr > target {
+		direction = -1
+	}
+	isUp := direction == 1
+
+	for ; curr != target; curr += direction {
+		idx := curr
+		if !isUp {
+			idx--
+		}
+
+		steps = append(steps, ms[idx].toStep(isUp))
+		if m.ZigZag {
+			steps = append(steps,
+				ms[idx].toStep(!isUp),
+				ms[idx].toStep(isUp))
+		}
+	}
+	return steps
+}
+
+type step struct {
+	Version int
+	IsQuery bool
+	Query   string
+	QueryFn MigrationFn
+}
+
+func (m *Migration) toStep(up bool) step {
+	if up {
+		return step{
+			Version: m.ID,
+			IsQuery: m.Apply != "",
+			Query:   m.Apply,
+			QueryFn: m.ApplyFn,
+		}
+	}
+	return step{
+		Version: m.ID - 1,
+		IsQuery: m.Rollback != "",
+		Query:   m.Rollback,
+		QueryFn: m.RollbackFn,
+	}
 }

@@ -68,3 +68,11 @@ func (mm *MockMigrator) Exec(ctx context.Context, query string, args ...interfac
 	}
 	return mm.ExecFn(ctx, query, args...)
 }
+
+type MockLoader struct {
+	LoaderFn func() ([]*Migration, error)
+}
+
+func (ml *MockLoader) Load() ([]*Migration, error) {
+	return ml.LoaderFn()
+}
