@@ -185,11 +185,17 @@ func (m *mig) runMigrationLocked(ctx context.Context, ms []*Migration) error {
 
 	// TODO(oleg): do ZigZag
 	for curr != target {
-		current := ms[curr]
-		sequence := current.ID
-		query, queryFn := current.Apply, current.ApplyFn
+		var current *Migration
+		var sequence int
+		var query string
+		var queryFn MigrationFn
 
-		if direction == -1 {
+		switch {
+		case direction == 1:
+			current = ms[curr]
+			sequence = current.ID
+			query, queryFn = current.Apply, current.ApplyFn
+		case direction == -1:
 			current = ms[curr-1]
 			sequence = current.ID - 1
 			query, queryFn = current.Rollback, current.RollbackFn

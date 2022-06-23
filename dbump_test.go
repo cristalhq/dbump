@@ -7,63 +7,162 @@ import (
 	"testing"
 )
 
-func TestMigrate(t *testing.T) {
-	log := []string{}
+func TestMigrateUp(t *testing.T) {
 	wantLog := []string{
 		"init",
 		"lockdb",
 		"getversion",
-		"exec",
-		"setversion",
-		"exec",
-		"setversion",
-		"exec",
-		"setversion",
+		"exec", "SELECT 1;", "[]",
+		"setversion", "1",
+		"exec", "SELECT 2;", "[]",
+		"setversion", "2",
+		"exec", "SELECT 3;", "[]",
+		"setversion", "3",
+		"exec", "SELECT 4;", "[]",
+		"setversion", "4",
+		"exec", "SELECT 5;", "[]",
+		"setversion", "5",
 		"unlockdb",
 	}
 
+	mm := &MockMigrator{}
 	cfg := Config{
-		Migrator: &MockMigrator{
-			InitFn: func(ctx context.Context) error {
-				log = append(log, "init")
-				return nil
-			},
-			LockDBFn: func(ctx context.Context) error {
-				log = append(log, "lockdb")
-				return nil
-			},
-			UnlockDBFn: func(ctx context.Context) error {
-				log = append(log, "unlockdb")
-				return nil
-			},
-
-			VersionFn: func(ctx context.Context) (version int, err error) {
-				log = append(log, "getversion")
-				return 0, nil
-			},
-			SetVersionFn: func(ctx context.Context, version int) error {
-				log = append(log, "setversion")
-				return nil
-			},
-
-			ExecFn: func(ctx context.Context, query string, args ...interface{}) error {
-				log = append(log, "exec")
-				return nil
-			},
-		},
-		Loader: NewSliceLoader(testdataMigrations),
-		Mode:   ModeUp,
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
 	}
 
 	err := Run(context.Background(), cfg)
 	failIfErr(t, err)
-
-	if !reflect.DeepEqual(log, wantLog) {
-		t.Fatalf("got %+v want %+v", log, wantLog)
-	}
+	mustEqual(t, mm.log, wantLog)
 }
 
-func TestLoadMigrations(t *testing.T) {
+func TestMigrateUpWhenFull(t *testing.T) {
+	wantLog := []string{
+		"init",
+		"lockdb",
+		"getversion",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return 5, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	err := Run(context.Background(), cfg)
+	failIfErr(t, err)
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestMigrateDown(t *testing.T) {
+	wantLog := []string{
+		"init",
+		"lockdb",
+		"getversion",
+		"exec", "SELECT 50;", "[]",
+		"setversion", "4",
+		"exec", "SELECT 40;", "[]",
+		"setversion", "3",
+		"exec", "SELECT 30;", "[]",
+		"setversion", "2",
+		"exec", "SELECT 20;", "[]",
+		"setversion", "1",
+		"exec", "SELECT 10;", "[]",
+		"setversion", "0",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return 5, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeDown,
+	}
+
+	err := Run(context.Background(), cfg)
+	failIfErr(t, err)
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestMigrateDownWhenEmpty(t *testing.T) {
+	wantLog := []string{
+		"init",
+		"lockdb",
+		"getversion",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return 0, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeDown,
+	}
+
+	err := Run(context.Background(), cfg)
+	failIfErr(t, err)
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestForce(t *testing.T) {
+	wantLog := []string{
+		"init",
+		"lockdb",
+		"unlockdb",
+		"lockdb",
+		"getversion",
+		"exec", "SELECT 4;", "[]",
+		"setversion", "4",
+		"exec", "SELECT 5;", "[]",
+		"setversion", "5",
+		"unlockdb",
+	}
+
+	isLocked := true
+
+	mm := &MockMigrator{
+		LockDBFn: func(ctx context.Context) error {
+			if isLocked {
+				return errors.New("cannot get lock")
+			}
+			return nil
+		},
+		UnlockDBFn: func(ctx context.Context) error {
+			isLocked = false
+			return nil
+		},
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return 3, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+		UseForce: true,
+	}
+
+	err := Run(context.Background(), cfg)
+	failIfErr(t, err)
+	mustEqual(t, mm.log, wantLog)
+}
+
+func Test_loadMigrations(t *testing.T) {
 	testCases := []struct {
 		testName       string
 		migrations     []*Migration
@@ -125,18 +224,13 @@ func TestLoadMigrations(t *testing.T) {
 		}
 
 		migs, err := m.load()
-		if (err != nil) != (tc.wantErr != nil) {
-			t.Fatalf("got %+v want %+v", err, tc.wantErr)
-		}
-
-		if !reflect.DeepEqual(migs, tc.wantMigrations) {
-			t.Fatalf("got %+v want %+v", migs, tc.wantMigrations)
-		}
+		mustEqual(t, err != nil, tc.wantErr != nil)
+		mustEqual(t, migs, tc.wantMigrations)
 	}
 }
 
 func TestZigZag(t *testing.T) {
-	t.Skip()
+	t.SkipNow()
 	cfg := Config{
 		ZigZag: true,
 	}
@@ -167,11 +261,32 @@ var testdataMigrations = []*Migration{
 		Rollback: `SELECT 30;`,
 		isQuery:  true,
 	},
+	{
+		ID:       4,
+		Name:     `0004_but_fix.sql`,
+		Apply:    `SELECT 4;`,
+		Rollback: `SELECT 40;`,
+		isQuery:  true,
+	},
+	{
+		ID:       5,
+		Name:     `0005_final.sql`,
+		Apply:    `SELECT 5;`,
+		Rollback: `SELECT 50;`,
+		isQuery:  true,
+	},
 }
 
 func failIfErr(t testing.TB, err error) {
 	t.Helper()
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func mustEqual(t testing.TB, got, want interface{}) {
+	t.Helper()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("\nhave %+v\nwant %+v", got, want)
 	}
 }
