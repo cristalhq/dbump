@@ -8,6 +8,7 @@ import (
 )
 
 // MigrationDelimiter separates apply and rollback queries inside a migration step/file.
+// Is exported just to be used by https://github.com/cristalhq/dbumper
 const MigrationDelimiter = `--- apply above / rollback below ---`
 
 // Config for the migration process. Is used only by Run function.
@@ -18,16 +19,19 @@ type Config struct {
 	// Loader of migrations.
 	Loader Loader
 
-	// UseForce to get a lock on a database.
-	UseForce bool
-
 	// Mode of the migration.
-	// Default is zero (ModeNotSet) which is an incorrect value.
-	// Set mode explicetly to show what should be done.
+	// Default is zero ModeNotSet (zero value) which is an incorrect value.
+	// Set mode explicitly to show how migration should be done.
 	Mode MigratorMode
 
+	// UseForce to get a lock on a database. MUST be used with the caution.
+	// Should be used when previos migration run didn't unlock the database,
+	// and this blocks subsequent runs.
+	UseForce bool
+
 	// ZigZag migration. Useful in tests.
-	// Does apply-rollback-apply/rollback-apply-rollback of each migration.
+	// Going up does apply-rollback-apply of each migration.
+	// Going down does rollback-apply-rollback of each migration.
 	ZigZag bool
 }
 
