@@ -64,11 +64,11 @@ type Migration struct {
 	isQuery bool // shortcut for the type of migration (query or func)
 }
 
-// MigrationFn ...
-type MigrationFn func(ctx context.Context, db DB) error
+// MigrationFn gives ability to use Go functions as migrations.
+type MigrationFn func(ctx context.Context, conn Conn) error
 
-// DB ...
-type DB interface {
+// Conn represents a connection to the database.
+type Conn interface {
 	Exec(ctx context.Context, query string, args ...interface{}) error
 }
 

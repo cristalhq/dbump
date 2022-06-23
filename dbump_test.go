@@ -415,10 +415,10 @@ func TestFailOnExecFunc(t *testing.T) {
 		isQuery:  false,
 		Apply:    "",
 		Rollback: "",
-		ApplyFn: func(ctx context.Context, db DB) error {
+		ApplyFn: func(ctx context.Context, conn Conn) error {
 			return errors.New("nil dereference")
 		},
-		RollbackFn: func(ctx context.Context, db DB) error {
+		RollbackFn: func(ctx context.Context, conn Conn) error {
 			return errors.New("nil dereference")
 		},
 	}
@@ -506,7 +506,7 @@ func Test_loadMigrations(t *testing.T) {
 				{
 					ID:    1,
 					Apply: "do",
-					ApplyFn: func(ctx context.Context, db DB) error {
+					ApplyFn: func(ctx context.Context, conn Conn) error {
 						return nil
 					},
 				},
