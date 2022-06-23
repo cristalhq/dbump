@@ -84,6 +84,11 @@ const (
 	modeMaxPossible
 )
 
+// AsLocklessMigrator makes given migrator to not take a lock in database.
+func AsLocklessMigrator(m Migrator) Migrator {
+	return &locklessMigrator{m}
+}
+
 // Run the Migrator with migration queries provided by the Loader.
 func Run(ctx context.Context, config Config) error {
 	switch {
@@ -281,4 +286,29 @@ func (m *Migration) toStep(up bool) step {
 		Query:   m.Rollback,
 		QueryFn: m.RollbackFn,
 	}
+}
+
+type locklessMigrator struct {
+	m Migrator
+}
+
+func (llm *locklessMigrator) Init(ctx context.Context) error {
+	return llm.m.Init(ctx)
+}
+func (llm *locklessMigrator) LockDB(ctx context.Context) error {
+	return nil
+}
+func (llm *locklessMigrator) UnlockDB(ctx context.Context) error {
+	return nil
+}
+
+func (llm *locklessMigrator) Version(ctx context.Context) (version int, err error) {
+	return llm.m.Version(ctx)
+}
+func (llm *locklessMigrator) SetVersion(ctx context.Context, version int) error {
+	return llm.m.SetVersion(ctx, version)
+}
+
+func (llm *locklessMigrator) Exec(ctx context.Context, query string, args ...interface{}) error {
+	return llm.m.Exec(ctx, query, args...)
 }
