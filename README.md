@@ -6,15 +6,27 @@
 [![coverage-img]][coverage-url]
 [![version-img]][version-url]
 
-Go database schema migrator library (See [dbumper](https://github.com/cristalhq/dbumper) tool).
+Go database schema migrator library (See [cristalhq/dbumper](https://github.com/cristalhq/dbumper) tool).
 
 ## Rationale
 
-TODO
+Most of the tools related to database migrations are bloated with the questionable features and dependecies. However, in most of the cases migrations are just files with queries to run. This library does this.
 
 ## Features
 
 * Simple.
+* Clean and tested code.
+* Supports `fs.FS` and `go:embed`.
+* `ZigZag` mode to better test migrations.
+* Go functions as a migration step.
+* Dependency-free (database connectors are optional).
+* Supported databases:
+  * Postgres
+  * MySQL
+  * ClickHouse
+  * or your own!
+
+See [GUIDE.md](https://github.com/cristalhq/dbump/blob/main/GUIDE.md) for more details.
 
 ## Install
 
@@ -26,7 +38,22 @@ go get github.com/cristalhq/dbump
 
 ## Example
 
-TODO
+```go
+ctx := context.Background()
+
+cfg := dbump.Config{
+	Migrator: dbump_pg.NewMigrator(db),
+	Loader:   dbump.NewFileSysLoader(embed, "/"),
+	Mode:     dbump.ModeUp,
+}
+
+err := dbump.Run(ctx, cfg)
+if err != nil {
+	panic(err)
+}
+```
+
+Also see examples: [example_test.go](https://github.com/cristalhq/dbump/blob/main/example_test.go).
 
 ## Documentation
 
