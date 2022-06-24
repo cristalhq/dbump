@@ -13,7 +13,7 @@ import (
 var conn *pgx.Conn
 
 func init() {
-	host := envOrDef("DBUMP_PG_HOST", "localhost")
+	host := envOrDef("DBUMP_PG_HOST", "")
 	port := envOrDef("DBUMP_PG_PORT", "5432")
 	username := envOrDef("DBUMP_PG_USER", "postgres")
 	password := envOrDef("DBUMP_PG_PASS", "postgres")
