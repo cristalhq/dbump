@@ -16,7 +16,7 @@ func init() {
 	host := envOrDef("DBUMP_PG_HOST", "localhost")
 	port := envOrDef("DBUMP_PG_PORT", "5432")
 	username := envOrDef("DBUMP_PG_USER", "pg_user")
-	password := envOrDef("DBUMP_PG_PASS", "pg_password")
+	password := envOrDef("DBUMP_PG_PASS", "postgres")
 	db := envOrDef("DBUMP_PG_DB", "pg_database")
 	sslmode := envOrDef("DBUMP_PG_SSL", "disable")
 
