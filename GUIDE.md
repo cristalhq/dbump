@@ -12,15 +12,15 @@ To find what database are supported see `dbump_*` directories in root:
 
 ## ZigZag mode
 
-This mode is made to heavily test uses migrations but doing `apply-rollback-apply` of each migration (assuming going up).
+This mode is made to heavily test uses migrations but doing `apply-revert-apply` of each migration (assuming going up).
 In a such way every migration is truly verified and minimizes potential problems in a real world.
 
 Detailed example, assuming we start with empty database (version 0):
 1. Apply migration 1
-2. Rollback migration 1
+2. Revert migration 1
 3. Apply migration 1
 4. Apply migration 2
-5. Rollback migration 2
+5. Revert migration 2
 6. Apply migration 2
 ...
 

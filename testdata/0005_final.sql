@@ -1,3 +1,3 @@
 SELECT 5;
---- apply above / rollback below ---
+--- apply above / revert below ---
 SELECT 50;

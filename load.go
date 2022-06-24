@@ -128,14 +128,14 @@ func parseMigration(body []byte) *Migration {
 	parts := strings.SplitN(string(body), MigrationDelimiter, 2)
 	applySQL := strings.TrimSpace(parts[0])
 
-	var rollbackSQL string
+	var revertSQL string
 	if len(parts) == 2 {
-		rollbackSQL = strings.TrimSpace(parts[1])
+		revertSQL = strings.TrimSpace(parts[1])
 	}
 
 	return &Migration{
-		Apply:    applySQL,
-		Rollback: rollbackSQL,
+		Apply:  applySQL,
+		Revert: revertSQL,
 	}
 }
 

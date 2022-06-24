@@ -7,9 +7,9 @@ import (
 	"sort"
 )
 
-// MigrationDelimiter separates apply and rollback queries inside a migration step/file.
+// MigrationDelimiter separates apply and revert queries inside a migration step/file.
 // Is exported just to be used by https://github.com/cristalhq/dbumper
-const MigrationDelimiter = `--- apply above / rollback below ---`
+const MigrationDelimiter = `--- apply above / revert below ---`
 
 // Config for the migration process. Is used only by Run function.
 type Config struct {
@@ -30,8 +30,8 @@ type Config struct {
 	UseForce bool
 
 	// ZigZag migration. Useful in tests.
-	// Going up does apply-rollback-apply of each migration.
-	// Going down does rollback-apply-rollback of each migration.
+	// Going up does apply-revert-apply of each migration.
+	// Going down does revert-apply-revert of each migration.
 	ZigZag bool
 }
 
@@ -54,12 +54,12 @@ type Loader interface {
 
 // Migration represents migration step that will be runned on a database.
 type Migration struct {
-	ID         int         // ID of the migration, unique, positive, starts from 1.
-	Name       string      // Name of the migration
-	Apply      string      // Apply query
-	Rollback   string      // Rollback query
-	ApplyFn    MigrationFn // Apply func
-	RollbackFn MigrationFn // Rollback func
+	ID       int         // ID of the migration, unique, positive, starts from 1.
+	Name     string      // Name of the migration
+	Apply    string      // Apply query
+	Revert   string      // Revert query
+	ApplyFn  MigrationFn // Apply func
+	RevertFn MigrationFn // Revert func
 
 	isQuery bool // shortcut for the type of migration (query or func)
 }
@@ -141,7 +141,7 @@ func (m *mig) load() ([]*Migration, error) {
 		case m.ID > want:
 			return nil, fmt.Errorf("missing migration number: %d (have %d)", want, m.ID)
 		default:
-			if (m.Apply != "" || m.Rollback != "") && (m.ApplyFn != nil || m.RollbackFn != nil) {
+			if (m.Apply != "" || m.Revert != "") && (m.ApplyFn != nil || m.RevertFn != nil) {
 				return nil, fmt.Errorf("mixing queries and functions is not allowed (migration %d)", m.ID)
 			}
 			m.isQuery = m.Apply != ""
@@ -282,9 +282,9 @@ func (m *Migration) toStep(up bool) step {
 	}
 	return step{
 		Version: m.ID - 1,
-		IsQuery: m.Rollback != "",
-		Query:   m.Rollback,
-		QueryFn: m.RollbackFn,
+		IsQuery: m.Revert != "",
+		Query:   m.Revert,
+		QueryFn: m.RevertFn,
 	}
 }
 

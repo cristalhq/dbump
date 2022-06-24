@@ -411,14 +411,14 @@ func TestFailOnExecFunc(t *testing.T) {
 	copy(testMigrations, testdataMigrations)
 
 	testMigrations[0] = &Migration{
-		ID:       1,
-		isQuery:  false,
-		Apply:    "",
-		Rollback: "",
+		ID:      1,
+		isQuery: false,
+		Apply:   "",
+		Revert:  "",
 		ApplyFn: func(ctx context.Context, conn Conn) error {
 			return errors.New("nil dereference")
 		},
-		RollbackFn: func(ctx context.Context, conn Conn) error {
+		RevertFn: func(ctx context.Context, conn Conn) error {
 			return errors.New("nil dereference")
 		},
 	}
@@ -529,39 +529,39 @@ func Test_loadMigrations(t *testing.T) {
 
 var testdataMigrations = []*Migration{
 	{
-		ID:       1,
-		Name:     `0001_init.sql`,
-		Apply:    `SELECT 1;`,
-		Rollback: `SELECT 10;`,
-		isQuery:  true,
+		ID:      1,
+		Name:    `0001_init.sql`,
+		Apply:   `SELECT 1;`,
+		Revert:  `SELECT 10;`,
+		isQuery: true,
 	},
 	{
-		ID:       2,
-		Name:     `0002_another.sql`,
-		Apply:    `SELECT 2;`,
-		Rollback: `SELECT 20;`,
-		isQuery:  true,
+		ID:      2,
+		Name:    `0002_another.sql`,
+		Apply:   `SELECT 2;`,
+		Revert:  `SELECT 20;`,
+		isQuery: true,
 	},
 	{
-		ID:       3,
-		Name:     `0003_even-better.sql`,
-		Apply:    `SELECT 3;`,
-		Rollback: `SELECT 30;`,
-		isQuery:  true,
+		ID:      3,
+		Name:    `0003_even-better.sql`,
+		Apply:   `SELECT 3;`,
+		Revert:  `SELECT 30;`,
+		isQuery: true,
 	},
 	{
-		ID:       4,
-		Name:     `0004_but_fix.sql`,
-		Apply:    `SELECT 4;`,
-		Rollback: `SELECT 40;`,
-		isQuery:  true,
+		ID:      4,
+		Name:    `0004_but_fix.sql`,
+		Apply:   `SELECT 4;`,
+		Revert:  `SELECT 40;`,
+		isQuery: true,
 	},
 	{
-		ID:       5,
-		Name:     `0005_final.sql`,
-		Apply:    `SELECT 5;`,
-		Rollback: `SELECT 50;`,
-		isQuery:  true,
+		ID:      5,
+		Name:    `0005_final.sql`,
+		Apply:   `SELECT 5;`,
+		Revert:  `SELECT 50;`,
+		isQuery: true,
 	},
 }
 
