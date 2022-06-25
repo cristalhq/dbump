@@ -69,14 +69,6 @@ type Migration struct {
 	Revert string // Revert query
 }
 
-// MigrationFn gives ability to use Go functions as migrations.
-type MigrationFn func(ctx context.Context, conn Conn) error
-
-// Conn represents a connection to the database.
-type Conn interface {
-	Exec(ctx context.Context, query string, args ...interface{}) error
-}
-
 // MigratorMode to change migration flow.
 type MigratorMode int
 
@@ -89,7 +81,7 @@ const (
 	modeMaxPossible
 )
 
-// AsLocklessMigrator makes given migrator to not take a lock in database.
+// AsLocklessMigrator makes given migrator to not take a lock on database.
 func AsLocklessMigrator(m Migrator) Migrator {
 	return &locklessMigrator{m}
 }
@@ -126,7 +118,7 @@ func (m *mig) run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("load: %w", err)
 	}
-	return m.runMigration(ctx, migrations)
+	return m.runMigrations(ctx, migrations)
 }
 
 func (m *mig) load() ([]*Migration, error) {
@@ -152,7 +144,7 @@ func (m *mig) load() ([]*Migration, error) {
 	return ms, nil
 }
 
-func (m *mig) runMigration(ctx context.Context, ms []*Migration) (err error) {
+func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
 	if err := m.Init(ctx); err != nil {
 		return fmt.Errorf("init: %w", err)
 	}
@@ -174,11 +166,11 @@ func (m *mig) runMigration(ctx context.Context, ms []*Migration) (err error) {
 		}
 	}()
 
-	err = m.runMigrationLocked(ctx, ms)
+	err = m.runMigrationsLocked(ctx, ms)
 	return err
 }
 
-func (m *mig) runMigrationLocked(ctx context.Context, ms []*Migration) error {
+func (m *mig) runMigrationsLocked(ctx context.Context, ms []*Migration) error {
 	curr, target, err := m.getCurrAndTargetVersions(ctx, len(ms))
 	if err != nil {
 		return err
@@ -330,9 +322,9 @@ func (llm *locklessMigrator) SetVersion(ctx context.Context, version int) error 
 	return llm.m.SetVersion(ctx, version)
 }
 
-func (llm *locklessMigrator) Begin(ctx context.Context) error    { return llm.Begin(ctx) }
-func (llm *locklessMigrator) Commit(ctx context.Context) error   { return llm.Commit(ctx) }
-func (llm *locklessMigrator) Rollback(ctx context.Context) error { return llm.Rollback(ctx) }
+func (llm *locklessMigrator) Begin(ctx context.Context) error    { return llm.m.Begin(ctx) }
+func (llm *locklessMigrator) Commit(ctx context.Context) error   { return llm.m.Commit(ctx) }
+func (llm *locklessMigrator) Rollback(ctx context.Context) error { return llm.m.Rollback(ctx) }
 
 func (llm *locklessMigrator) Exec(ctx context.Context, query string, args ...interface{}) error {
 	return llm.m.Exec(ctx, query, args...)
