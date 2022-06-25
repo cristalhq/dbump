@@ -47,9 +47,6 @@ func TestRunCheck(t *testing.T) {
 	}
 }
 
-func TestLoaderError(t *testing.T) {
-}
-
 func TestMigrateUp(t *testing.T) {
 	wantLog := []string{
 		"init", "lockdb", "getversion",
