@@ -199,7 +199,7 @@ func (m *mig) execStepSafely(ctx context.Context, step step) (err error) {
 	defer func() {
 		if err != nil {
 			if errRollback := m.Migrator.Rollback(ctx); errRollback != nil {
-				err = fmt.Errorf("rollback tx: %w", errRollback)
+				err = fmt.Errorf("(rollback tx: %v): %w", errRollback, err)
 			}
 		}
 	}()
