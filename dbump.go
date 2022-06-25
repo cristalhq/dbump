@@ -25,7 +25,7 @@ type Config struct {
 	Mode MigratorMode
 
 	// UseForce to get a lock on a database. MUST be used with the caution.
-	// Should be used when previos migration run didn't unlock the database,
+	// Should be used when previous migration run didn't unlock the database,
 	// and this blocks subsequent runs.
 	UseForce bool
 

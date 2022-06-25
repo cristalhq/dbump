@@ -26,8 +26,8 @@ func NewMigrator(conn *pgx.Conn) *Migrator {
 
 // Init migrator.
 func (pg *Migrator) Init(ctx context.Context) error {
-	query := `CREATE TABLE IF NOT EXISTS _dbump_schema_version (
-	version    BIGINT                   NOT NULL PRIMARY KEY,
+	query := `CREATE TABLE IF NOT EXISTS _dbump_log (
+	version    BIGINT NOT NULL PRIMARY KEY,
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );`
 	_, err := pg.conn.Exec(ctx, query)
@@ -48,7 +48,7 @@ func (pg *Migrator) UnlockDB(ctx context.Context) error {
 
 // Version is a method for Migrator interface.
 func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
-	query := "SELECT COUNT(*) FROM _dbump_schema_version;"
+	query := "SELECT COUNT(*) FROM _dbump_log;"
 	row := pg.conn.QueryRow(ctx, query)
 	err = row.Scan(&version)
 	return version, err
@@ -56,10 +56,9 @@ func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 
 // SetVersion is a method for Migrator interface.
 func (pg *Migrator) SetVersion(ctx context.Context, version int) error {
-	query := `INSERT INTO _dbump_schema_version (version, created_at)
-VALUES ($1, NOW())
-ON CONFLICT (version) DO UPDATE
-SET created_at = NOW();`
+	query := `DELETE FROM _dbump_log WHERE version >= $1;
+INSERT INTO _dbump_log (version, created_at) VALUES ($1, NOW())
+ON CONFLICT (version) DO UPDATE SET created_at = NOW();`
 	_, err := pg.conn.Exec(ctx, query, version)
 	return err
 }
