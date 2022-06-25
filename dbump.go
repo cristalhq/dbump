@@ -24,6 +24,11 @@ type Config struct {
 	// Set mode explicitly to show how migration should be done.
 	Mode MigratorMode
 
+	// DisableTx will run every migration not in a transaction.
+	// This completely depends on a specific Migrator implementation
+	// because not every database supports transaction, so this option can be no-op all the time.
+	DisableTx bool
+
 	// UseForce to get a lock on a database. MUST be used with the caution.
 	// Should be used when previous migration run didn't unlock the database,
 	// and this blocks subsequent runs.
@@ -43,6 +48,10 @@ type Migrator interface {
 
 	Version(ctx context.Context) (version int, err error)
 	SetVersion(ctx context.Context, version int) error
+
+	Begin(ctx context.Context) error
+	Commit(ctx context.Context) error
+	Rollback(ctx context.Context) error
 
 	Exec(ctx context.Context, query string, args ...interface{}) error
 }
@@ -176,18 +185,46 @@ func (m *mig) runMigrationLocked(ctx context.Context, ms []*Migration) error {
 	}
 
 	for _, step := range m.prepareSteps(curr, target, ms) {
-		if step.IsQuery {
-			err = m.Exec(ctx, step.Query)
-		} else {
-			err = step.QueryFn(ctx, m)
-		}
-		if err != nil {
+		if err := m.execStep(ctx, step); err != nil {
 			return fmt.Errorf("exec: %w", err)
 		}
+	}
+	return nil
+}
 
-		if err := m.SetVersion(ctx, step.Version); err != nil {
-			return fmt.Errorf("set version: %w", err)
+func (m *mig) execStep(ctx context.Context, step step) error {
+	if m.Config.DisableTx {
+		return m.execSimpleStep(ctx, step)
+	}
+	return m.execStepSafely(ctx, step)
+}
+
+func (m *mig) execStepSafely(ctx context.Context, step step) (err error) {
+	if err := m.Migrator.Begin(ctx); err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+
+	defer func() {
+		if err != nil {
+			if errRollback := m.Migrator.Rollback(ctx); errRollback != nil {
+				err = fmt.Errorf("rollback tx: %w", errRollback)
+			}
 		}
+	}()
+
+	err = m.execSimpleStep(ctx, step)
+	if err == nil {
+		err = m.Commit(ctx)
+	}
+	return err
+}
+
+func (m *mig) execSimpleStep(ctx context.Context, step step) error {
+	if err := m.Exec(ctx, step.Query); err != nil {
+		return fmt.Errorf("exec: %w", err)
+	}
+	if err := m.SetVersion(ctx, step.Version); err != nil {
+		return fmt.Errorf("set version: %w", err)
 	}
 	return nil
 }
@@ -261,7 +298,6 @@ type step struct {
 	Version int
 	IsQuery bool
 	Query   string
-	QueryFn MigrationFn
 }
 
 func (m *Migration) toStep(up bool) step {
@@ -283,15 +319,9 @@ type locklessMigrator struct {
 	m Migrator
 }
 
-func (llm *locklessMigrator) Init(ctx context.Context) error {
-	return llm.m.Init(ctx)
-}
-func (llm *locklessMigrator) LockDB(ctx context.Context) error {
-	return nil
-}
-func (llm *locklessMigrator) UnlockDB(ctx context.Context) error {
-	return nil
-}
+func (llm *locklessMigrator) Init(ctx context.Context) error     { return llm.m.Init(ctx) }
+func (llm *locklessMigrator) LockDB(ctx context.Context) error   { return nil }
+func (llm *locklessMigrator) UnlockDB(ctx context.Context) error { return nil }
 
 func (llm *locklessMigrator) Version(ctx context.Context) (version int, err error) {
 	return llm.m.Version(ctx)
@@ -299,6 +329,10 @@ func (llm *locklessMigrator) Version(ctx context.Context) (version int, err erro
 func (llm *locklessMigrator) SetVersion(ctx context.Context, version int) error {
 	return llm.m.SetVersion(ctx, version)
 }
+
+func (llm *locklessMigrator) Begin(ctx context.Context) error    { return llm.Begin(ctx) }
+func (llm *locklessMigrator) Commit(ctx context.Context) error   { return llm.Commit(ctx) }
+func (llm *locklessMigrator) Rollback(ctx context.Context) error { return llm.Rollback(ctx) }
 
 func (llm *locklessMigrator) Exec(ctx context.Context, query string, args ...interface{}) error {
 	return llm.m.Exec(ctx, query, args...)

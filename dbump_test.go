@@ -40,10 +40,7 @@ func TestRunCheck(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		err := Run(context.Background(), tc.cfg)
-		if err == nil {
-			t.Fail()
-		}
+		failIfOk(t, Run(context.Background(), tc.cfg))
 	}
 }
 
@@ -60,13 +57,13 @@ func TestMigrateUp(t *testing.T) {
 
 	mm := &MockMigrator{}
 	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeUp,
+		Migrator:  mm,
+		Loader:    NewSliceLoader(testdataMigrations),
+		Mode:      ModeUp,
+		DisableTx: true, // for shorter wantLog
 	}
 
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
+	failIfErr(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -86,8 +83,7 @@ func TestMigrateUpWhenFull(t *testing.T) {
 		Mode:     ModeUp,
 	}
 
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
+	failIfErr(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -95,7 +91,9 @@ func TestMigrateUpOne(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
 		"init", "lockdb", "getversion",
+		"begin",
 		"exec", "SELECT 4;", "[]", "setversion", "4",
+		"commit",
 		"unlockdb",
 	}
 
@@ -110,8 +108,7 @@ func TestMigrateUpOne(t *testing.T) {
 		Mode:     ModeUpOne,
 	}
 
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
+	failIfErr(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -132,13 +129,13 @@ func TestMigrateDown(t *testing.T) {
 		},
 	}
 	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeDown,
+		Migrator:  mm,
+		Loader:    NewSliceLoader(testdataMigrations),
+		Mode:      ModeDown,
+		DisableTx: true, // for shorter wantLog
 	}
 
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
+	failIfErr(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -158,8 +155,7 @@ func TestMigrateDownWhenEmpty(t *testing.T) {
 		Mode:     ModeDown,
 	}
 
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
+	failIfErr(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -167,7 +163,9 @@ func TestMigrateDownOne(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
 		"init", "lockdb", "getversion",
+		"begin",
 		"exec", "SELECT 30;", "[]", "setversion", "2",
+		"commit",
 		"unlockdb",
 	}
 
@@ -182,8 +180,7 @@ func TestMigrateDownOne(t *testing.T) {
 		Mode:     ModeDownOne,
 	}
 
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
+	failIfErr(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -214,14 +211,14 @@ func TestUseForce(t *testing.T) {
 		},
 	}
 	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeUp,
-		UseForce: true,
+		Migrator:  mm,
+		Loader:    NewSliceLoader(testdataMigrations),
+		Mode:      ModeUp,
+		UseForce:  true,
+		DisableTx: true, // for shorter wantLog
 	}
 
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
+	failIfErr(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -252,14 +249,14 @@ func TestZigZag(t *testing.T) {
 
 	mm := &MockMigrator{}
 	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeUp,
-		ZigZag:   true,
+		Migrator:  mm,
+		Loader:    NewSliceLoader(testdataMigrations),
+		Mode:      ModeUp,
+		DisableTx: true, // for shorter wantLog
+		ZigZag:    true,
 	}
 
-	err := Run(context.Background(), cfg)
-	failIfErr(t, err)
+	failIfErr(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -276,10 +273,7 @@ func TestFailOnInitError(t *testing.T) {
 		Mode:     ModeUp,
 	}
 
-	err := Run(context.Background(), cfg)
-	if err == nil {
-		t.Fail()
-	}
+	failIfOk(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -298,10 +292,7 @@ func TestFailOnLockDB(t *testing.T) {
 		Mode:     ModeUp,
 	}
 
-	err := Run(context.Background(), cfg)
-	if err == nil {
-		t.Fail()
-	}
+	failIfOk(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -309,7 +300,9 @@ func TestFailOnUnlockDB(t *testing.T) {
 	currVersion := 4
 	wantLog := []string{
 		"init", "lockdb", "getversion",
+		"begin",
 		"exec", "SELECT 5;", "[]", "setversion", "5",
+		"commit",
 		"unlockdb",
 	}
 	mm := &MockMigrator{
@@ -326,10 +319,7 @@ func TestFailOnUnlockDB(t *testing.T) {
 		Mode:     ModeUp,
 	}
 
-	err := Run(context.Background(), cfg)
-	if err == nil {
-		t.Fail()
-	}
+	failIfOk(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -348,17 +338,16 @@ func TestFailOnGetVersionError(t *testing.T) {
 		Mode:     ModeUp,
 	}
 
-	err := Run(context.Background(), cfg)
-	if err == nil {
-		t.Fail()
-	}
+	failIfOk(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
 func TestFailOnSetVersionError(t *testing.T) {
 	wantLog := []string{
 		"init", "lockdb", "getversion",
+		"begin",
 		"exec", "SELECT 1;", "[]", "setversion", "1",
+		"rollback",
 		"unlockdb",
 	}
 	mm := &MockMigrator{
@@ -372,17 +361,37 @@ func TestFailOnSetVersionError(t *testing.T) {
 		Mode:     ModeUp,
 	}
 
-	err := Run(context.Background(), cfg)
-	if err == nil {
-		t.Fail()
+	failIfOk(t, Run(context.Background(), cfg))
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnBegin(t *testing.T) {
+	wantLog := []string{
+		"init", "lockdb", "getversion",
+		"begin",
+		"unlockdb",
 	}
+	mm := &MockMigrator{
+		BeginFn: func(ctx context.Context) error {
+			return errors.New("timeout")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	failIfOk(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
 func TestFailOnExec(t *testing.T) {
 	wantLog := []string{
 		"init", "lockdb", "getversion",
+		"begin",
 		"exec", "SELECT 1;", "[]",
+		"rollback",
 		"unlockdb",
 	}
 	mm := &MockMigrator{
@@ -396,10 +405,58 @@ func TestFailOnExec(t *testing.T) {
 		Mode:     ModeUp,
 	}
 
-	err := Run(context.Background(), cfg)
-	if err == nil {
-		t.Fail()
+	failIfOk(t, Run(context.Background(), cfg))
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnCommit(t *testing.T) {
+	wantLog := []string{
+		"init", "lockdb", "getversion",
+		"begin",
+		"exec", "SELECT 1;", "[]", "setversion", "1",
+		"commit",
+		"rollback",
+		"unlockdb",
 	}
+	mm := &MockMigrator{
+		CommitFn: func(ctx context.Context) error {
+			return errors.New("constraint violation")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	failIfOk(t, Run(context.Background(), cfg))
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestFailOnRollback(t *testing.T) {
+	wantLog := []string{
+		"init", "lockdb", "getversion",
+		"begin",
+		"exec", "SELECT 1;", "[]", "setversion", "1",
+		"commit",
+		"rollback",
+		"unlockdb",
+	}
+	mm := &MockMigrator{
+		CommitFn: func(ctx context.Context) error {
+			return errors.New("constraint violation")
+		},
+		RollbackFn: func(ctx context.Context) error {
+			return errors.New("timeout")
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	failIfOk(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
@@ -413,10 +470,7 @@ func TestFailOnLoad(t *testing.T) {
 		},
 		Mode: ModeUp,
 	}
-	err := Run(context.Background(), cfg)
-	if err == nil {
-		t.Fail()
-	}
+	failIfOk(t, Run(context.Background(), cfg))
 }
 
 func Test_loadMigrations(t *testing.T) {
@@ -503,6 +557,13 @@ var testdataMigrations = []*Migration{
 		Apply:  `SELECT 5;`,
 		Revert: `SELECT 50;`,
 	},
+}
+
+func failIfOk(t testing.TB, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fail()
+	}
 }
 
 func failIfErr(t testing.TB, err error) {

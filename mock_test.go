@@ -18,7 +18,10 @@ type MockMigrator struct {
 	VersionFn    func(ctx context.Context) (version int, err error)
 	SetVersionFn func(ctx context.Context, version int) error
 
-	ExecFn func(ctx context.Context, query string, args ...interface{}) error
+	BeginFn    func(ctx context.Context) error
+	CommitFn   func(ctx context.Context) error
+	RollbackFn func(ctx context.Context) error
+	ExecFn     func(ctx context.Context, query string, args ...interface{}) error
 }
 
 func (mm *MockMigrator) Init(ctx context.Context) error {
@@ -59,6 +62,28 @@ func (mm *MockMigrator) SetVersion(ctx context.Context, version int) error {
 		return nil
 	}
 	return mm.SetVersionFn(ctx, version)
+}
+
+func (mm *MockMigrator) Begin(ctx context.Context) error {
+	mm.log = append(mm.log, "begin")
+	if mm.BeginFn == nil {
+		return nil
+	}
+	return mm.BeginFn(ctx)
+}
+func (mm *MockMigrator) Commit(ctx context.Context) error {
+	mm.log = append(mm.log, "commit")
+	if mm.CommitFn == nil {
+		return nil
+	}
+	return mm.CommitFn(ctx)
+}
+func (mm *MockMigrator) Rollback(ctx context.Context) error {
+	mm.log = append(mm.log, "rollback")
+	if mm.RollbackFn == nil {
+		return nil
+	}
+	return mm.RollbackFn(ctx)
 }
 
 func (mm *MockMigrator) Exec(ctx context.Context, query string, args ...interface{}) error {
