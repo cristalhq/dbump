@@ -34,21 +34,21 @@ func (dl *DiskLoader) Load() ([]*Migration, error) {
 
 // FileSysLoader can load migrations from fs.FS.
 type FileSysLoader struct {
-	fs   FS
+	fsys FS
 	path string
 }
 
 // NewFileSysLoader instantiates a new FileSysLoader.
-func NewFileSysLoader(fs FS, path string) *FileSysLoader {
+func NewFileSysLoader(fsys FS, path string) *FileSysLoader {
 	return &FileSysLoader{
-		fs:   fs,
+		fsys: fsys,
 		path: strings.TrimRight(path, string(os.PathSeparator)),
 	}
 }
 
 // Load is a method for Loader interface.
 func (el *FileSysLoader) Load() ([]*Migration, error) {
-	return loadMigrationsFromFS(el.fs, el.path)
+	return loadMigrationsFromFS(el.fsys, el.path)
 }
 
 // SliceLoader loads given migrations.
@@ -78,8 +78,8 @@ func (sl *SliceLoader) AddMigration(m *Migration) {
 
 var migrationRE = regexp.MustCompile(`^(\d+)_.+\.sql$`)
 
-func loadMigrationsFromFS(fs FS, path string) ([]*Migration, error) {
-	files, err := fs.ReadDir(path)
+func loadMigrationsFromFS(fsys FS, path string) ([]*Migration, error) {
+	files, err := fsys.ReadDir(path)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func loadMigrationsFromFS(fs FS, path string) ([]*Migration, error) {
 			continue
 		}
 
-		m, err := loadMigrationFromFS(fs, path, matches[1], fi.Name())
+		m, err := loadMigrationFromFS(fsys, path, matches[1], fi.Name())
 		if err != nil {
 			return nil, err
 		}
@@ -105,13 +105,13 @@ func loadMigrationsFromFS(fs FS, path string) ([]*Migration, error) {
 	return migs, nil
 }
 
-func loadMigrationFromFS(fs FS, path, id, name string) (*Migration, error) {
+func loadMigrationFromFS(fsys FS, path, id, name string) (*Migration, error) {
 	n, err := strconv.ParseInt(id, 10, 32)
 	if err != nil {
 		return nil, err
 	}
 
-	body, err := fs.ReadFile(filepath.Join(path, name))
+	body, err := fsys.ReadFile(filepath.Join(path, name))
 	if err != nil {
 		return nil, err
 	}
