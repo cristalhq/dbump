@@ -119,7 +119,6 @@ func loadMigrationFromFS(fsys FS, path, id, name string) (*Migration, error) {
 	m := parseMigration(body)
 	m.ID = int(n)
 	m.Name = name
-	m.isQuery = true
 	return m, nil
 }
 

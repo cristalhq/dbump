@@ -54,14 +54,10 @@ type Loader interface {
 
 // Migration represents migration step that will be runned on a database.
 type Migration struct {
-	ID       int         // ID of the migration, unique, positive, starts from 1.
-	Name     string      // Name of the migration
-	Apply    string      // Apply query
-	Revert   string      // Revert query
-	ApplyFn  MigrationFn // Apply func
-	RevertFn MigrationFn // Revert func
-
-	isQuery bool // shortcut for the type of migration (query or func)
+	ID     int    // ID of the migration, unique, positive, starts from 1.
+	Name   string // Name of the migration
+	Apply  string // Apply query
+	Revert string // Revert query
 }
 
 // MigrationFn gives ability to use Go functions as migrations.
@@ -141,10 +137,7 @@ func (m *mig) load() ([]*Migration, error) {
 		case m.ID > want:
 			return nil, fmt.Errorf("missing migration number: %d (have %d)", want, m.ID)
 		default:
-			if (m.Apply != "" || m.Revert != "") && (m.ApplyFn != nil || m.RevertFn != nil) {
-				return nil, fmt.Errorf("mixing queries and functions is not allowed (migration %d)", m.ID)
-			}
-			m.isQuery = m.Apply != ""
+			// pass
 		}
 	}
 	return ms, nil
@@ -277,14 +270,12 @@ func (m *Migration) toStep(up bool) step {
 			Version: m.ID,
 			IsQuery: m.Apply != "",
 			Query:   m.Apply,
-			QueryFn: m.ApplyFn,
 		}
 	}
 	return step{
 		Version: m.ID - 1,
 		IsQuery: m.Revert != "",
 		Query:   m.Revert,
-		QueryFn: m.RevertFn,
 	}
 }
 

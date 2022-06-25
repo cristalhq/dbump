@@ -47,9 +47,6 @@ func TestRunCheck(t *testing.T) {
 	}
 }
 
-func TestLoaderError(t *testing.T) {
-}
-
 func TestMigrateUp(t *testing.T) {
 	wantLog := []string{
 		"init", "lockdb", "getversion",
@@ -406,44 +403,6 @@ func TestFailOnExec(t *testing.T) {
 	mustEqual(t, mm.log, wantLog)
 }
 
-func TestFailOnExecFunc(t *testing.T) {
-	testMigrations := make([]*Migration, len(testdataMigrations))
-	copy(testMigrations, testdataMigrations)
-
-	testMigrations[0] = &Migration{
-		ID:      1,
-		isQuery: false,
-		Apply:   "",
-		Revert:  "",
-		ApplyFn: func(ctx context.Context, conn Conn) error {
-			return errors.New("nil dereference")
-		},
-		RevertFn: func(ctx context.Context, conn Conn) error {
-			return errors.New("nil dereference")
-		},
-	}
-
-	wantLog := []string{
-		"init", "lockdb", "getversion", "unlockdb",
-	}
-	mm := &MockMigrator{
-		ExecFn: func(ctx context.Context, query string, args ...interface{}) error {
-			return errors.New("syntax error")
-		},
-	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testMigrations),
-		Mode:     ModeUp,
-	}
-
-	err := Run(context.Background(), cfg)
-	if err == nil {
-		t.Fail()
-	}
-	mustEqual(t, mm.log, wantLog)
-}
-
 func TestFailOnLoad(t *testing.T) {
 	cfg := Config{
 		Migrator: &MockMigrator{},
@@ -500,20 +459,6 @@ func Test_loadMigrations(t *testing.T) {
 			nil,
 			errors.New("duplicate migration number: 2 (mig2)"),
 		},
-		{
-			"fail (mix of query and func)",
-			[]*Migration{
-				{
-					ID:    1,
-					Apply: "do",
-					ApplyFn: func(ctx context.Context, conn Conn) error {
-						return nil
-					},
-				},
-			},
-			nil,
-			errors.New("mixing queries and functions is not allowed (migration 1)"),
-		},
 	}
 
 	for _, tc := range testCases {
@@ -529,39 +474,34 @@ func Test_loadMigrations(t *testing.T) {
 
 var testdataMigrations = []*Migration{
 	{
-		ID:      1,
-		Name:    `0001_init.sql`,
-		Apply:   `SELECT 1;`,
-		Revert:  `SELECT 10;`,
-		isQuery: true,
+		ID:     1,
+		Name:   `0001_init.sql`,
+		Apply:  `SELECT 1;`,
+		Revert: `SELECT 10;`,
 	},
 	{
-		ID:      2,
-		Name:    `0002_another.sql`,
-		Apply:   `SELECT 2;`,
-		Revert:  `SELECT 20;`,
-		isQuery: true,
+		ID:     2,
+		Name:   `0002_another.sql`,
+		Apply:  `SELECT 2;`,
+		Revert: `SELECT 20;`,
 	},
 	{
-		ID:      3,
-		Name:    `0003_even-better.sql`,
-		Apply:   `SELECT 3;`,
-		Revert:  `SELECT 30;`,
-		isQuery: true,
+		ID:     3,
+		Name:   `0003_even-better.sql`,
+		Apply:  `SELECT 3;`,
+		Revert: `SELECT 30;`,
 	},
 	{
-		ID:      4,
-		Name:    `0004_but_fix.sql`,
-		Apply:   `SELECT 4;`,
-		Revert:  `SELECT 40;`,
-		isQuery: true,
+		ID:     4,
+		Name:   `0004_but_fix.sql`,
+		Apply:  `SELECT 4;`,
+		Revert: `SELECT 40;`,
 	},
 	{
-		ID:      5,
-		Name:    `0005_final.sql`,
-		Apply:   `SELECT 5;`,
-		Revert:  `SELECT 50;`,
-		isQuery: true,
+		ID:     5,
+		Name:   `0005_final.sql`,
+		Apply:  `SELECT 5;`,
+		Revert: `SELECT 50;`,
 	},
 }
 
