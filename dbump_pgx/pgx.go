@@ -2,6 +2,7 @@ package dbump_pgx
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/cristalhq/dbump"
@@ -74,6 +75,9 @@ func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 		row = pg.conn.QueryRow(ctx, query)
 	}
 	err = row.Scan(&version)
+	if err != nil && errors.Is(err, pgx.ErrNoRows) {
+		return 0, nil
+	}
 	return version, err
 }
 
