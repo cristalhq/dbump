@@ -18,7 +18,6 @@ Most of the tools related to database migrations are bloated with the questionab
 * Clean and tested code.
 * Supports `fs.FS` and `go:embed`.
 * `ZigZag` mode to better test migrations.
-* Go functions as a migration step.
 * Dependency-free (database connectors are optional).
 * Supported databases:
   * Postgres
