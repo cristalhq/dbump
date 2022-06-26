@@ -67,7 +67,12 @@ func (pg *Migrator) UnlockDB(ctx context.Context) error {
 // Version is a method from Migrator interface.
 func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 	query := "SELECT id FROM %s ORDER BY created_at DESC LIMIT 1;"
-	row := pg.tx.QueryRow(ctx, query)
+	var row pgx.Row
+	if pg.tx != nil {
+		row = pg.tx.QueryRow(ctx, query)
+	} else {
+		row = pg.conn.QueryRow(ctx, query)
+	}
 	err = row.Scan(&version)
 	return version, err
 }
@@ -75,7 +80,12 @@ func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 // SetVersion is a method from Migrator interface.
 func (pg *Migrator) SetVersion(ctx context.Context, version int) error {
 	query := `INSERT INTO %s (version, created_at) VALUES ($1, NOW());`
-	_, err := pg.tx.Exec(ctx, query, version)
+	var err error
+	if pg.tx != nil {
+		_, err = pg.tx.Exec(ctx, query, version)
+	} else {
+		_, err = pg.conn.Exec(ctx, query, version)
+	}
 	return err
 }
 
@@ -98,6 +108,11 @@ func (pg *Migrator) Rollback(ctx context.Context) error {
 
 // Exec is a method from Migrator interface.
 func (pg *Migrator) Exec(ctx context.Context, query string, args ...interface{}) error {
-	_, err := pg.tx.Exec(ctx, query, args...)
+	var err error
+	if pg.tx != nil {
+		_, err = pg.tx.Exec(ctx, query, args...)
+	} else {
+		_, err = pg.conn.Exec(ctx, query, args...)
+	}
 	return err
 }
