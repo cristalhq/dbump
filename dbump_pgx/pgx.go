@@ -2,6 +2,7 @@ package dbump_pgx
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cristalhq/dbump"
 	"github.com/jackc/pgx/v4"
@@ -43,10 +44,10 @@ func NewMigrator(conn *pgx.Conn, cfg Config) *Migrator {
 
 // Init is a method from Migrator interface.
 func (pg *Migrator) Init(ctx context.Context) error {
-	query := `CREATE TABLE IF NOT EXISTS %s (
+	query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 	version    BIGINT NOT NULL,
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL
-);`
+);`, pg.tableName)
 	_, err := pg.conn.Exec(ctx, query)
 	return err
 }
@@ -65,7 +66,7 @@ func (pg *Migrator) UnlockDB(ctx context.Context) error {
 
 // Version is a method from Migrator interface.
 func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
-	query := "SELECT id FROM %s ORDER BY created_at DESC LIMIT 1;"
+	query := fmt.Sprintf("SELECT version FROM %s ORDER BY created_at DESC LIMIT 1;", pg.tableName)
 	var row pgx.Row
 	if pg.tx != nil {
 		row = pg.tx.QueryRow(ctx, query)
@@ -78,7 +79,7 @@ func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 
 // SetVersion is a method from Migrator interface.
 func (pg *Migrator) SetVersion(ctx context.Context, version int) error {
-	query := `INSERT INTO %s (version, created_at) VALUES ($1, NOW());`
+	query := fmt.Sprintf("INSERT INTO %s (version, created_at) VALUES ($1, NOW());", pg.tableName)
 	var err error
 	if pg.tx != nil {
 		_, err = pg.tx.Exec(ctx, query, version)
