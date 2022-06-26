@@ -2,6 +2,8 @@ package dbump_pgx
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"reflect"
 	"testing"
 
@@ -10,6 +12,24 @@ import (
 )
 
 var conn *pgx.Conn
+
+func init() {
+	host := envOrDef("DBUMP_PG_HOST", "localhost")
+	port := envOrDef("DBUMP_PG_PORT", "5432")
+	username := envOrDef("DBUMP_PG_USER", "postgres")
+	password := envOrDef("DBUMP_PG_PASS", "postgres")
+	db := envOrDef("DBUMP_PG_DB", "postgres")
+	sslmode := envOrDef("DBUMP_PG_SSL", "disable")
+
+	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
+		host, port, username, password, db, sslmode)
+
+	var err error
+	conn, err = pgx.Connect(context.Background(), dsn)
+	if err != nil {
+		panic(fmt.Sprintf("dbump_pgx: cannot connect to container: %s", err))
+	}
+}
 
 func TestNonDefaultSchemaTable(t *testing.T) {
 	testCases := []struct {
@@ -523,4 +543,11 @@ func mustEqual(t testing.TB, got, want interface{}) {
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("\nhave %+v\nwant %+v", got, want)
 	}
+}
+
+func envOrDef(env, def string) string {
+	if val := os.Getenv(env); val != "" {
+		return val
+	}
+	return def
 }
