@@ -11,6 +11,48 @@ import (
 
 var conn *pgx.Conn
 
+func TestNonDefaultSchemaTable(t *testing.T) {
+	testCases := []struct {
+		name          string
+		schema        string
+		table         string
+		wantTableName string
+	}{
+		{
+			name:          "all empty",
+			schema:        "",
+			table:         "",
+			wantTableName: "_dbump_log",
+		},
+		{
+			name:          "schema set",
+			schema:        "test_schema",
+			table:         "",
+			wantTableName: "test_schema._dbump_log",
+		},
+		{
+			name:          "table set",
+			schema:        "",
+			table:         "test_table",
+			wantTableName: "test_table",
+		},
+		{
+			name:          "schema and table set",
+			schema:        "test_schema",
+			table:         "test_table",
+			wantTableName: "test_schema.test_table",
+		},
+	}
+
+	for _, tc := range testCases {
+		m := NewMigrator(conn, Config{
+			Schema: tc.schema,
+			Table:  tc.table,
+		})
+		mustEqual(t, m.tableName, tc.wantTableName)
+	}
+}
+
 func TestMigrateUp(t *testing.T) {
 	migrations := []*dbump.Migration{
 		{

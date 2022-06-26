@@ -2,7 +2,6 @@ package dbump_pgx
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cristalhq/dbump"
 	"github.com/jackc/pgx/v4"
@@ -30,15 +29,15 @@ type Config struct {
 
 // NewMigrator instantiates new Migrator.
 func NewMigrator(conn *pgx.Conn, cfg Config) *Migrator {
-	if cfg.Schema == "" {
-		cfg.Schema = "public"
+	if cfg.Schema != "" {
+		cfg.Schema += "."
 	}
 	if cfg.Table == "" {
 		cfg.Table = "_dbump_log"
 	}
 	return &Migrator{
 		conn:      conn,
-		tableName: fmt.Sprintf("%s.%s", cfg.Schema, cfg.Table),
+		tableName: cfg.Schema + cfg.Table,
 	}
 }
 
