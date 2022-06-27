@@ -85,12 +85,20 @@ func TestMigrateUp(t *testing.T) {
 			Apply:  "SELECT 2;",
 			Revert: "SELECT 20;",
 		},
+		{
+			ID:     3,
+			Apply:  "SELECT 3;",
+			Revert: "SELECT 30;",
+		},
 	}
 
 	cfg := dbump.Config{
-		Migrator: NewMigrator(conn, Config{Table: "TestMigrateUp"}),
-		Loader:   dbump.NewSliceLoader(migrations),
-		Mode:     dbump.ModeUp,
+		Migrator: NewMigrator(conn, Config{
+			Schema: "TestSchemaUp",
+			Table:  "TestMigrateUp",
+		}),
+		Loader: dbump.NewSliceLoader(migrations),
+		Mode:   dbump.ModeUp,
 	}
 
 	failIfErr(t, dbump.Run(context.Background(), cfg))

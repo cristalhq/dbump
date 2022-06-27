@@ -18,6 +18,7 @@ var _ dbump.Migrator = &Migrator{}
 type Migrator struct {
 	conn      *pgx.Conn
 	tx        pgx.Tx
+	cfg       Config
 	tableName string
 }
 
@@ -31,24 +32,29 @@ type Config struct {
 
 // NewMigrator instantiates new Migrator.
 func NewMigrator(conn *pgx.Conn, cfg Config) *Migrator {
+	var tableName string
 	if cfg.Schema != "" {
-		cfg.Schema += "."
+		tableName += cfg.Schema + "."
 	}
 	if cfg.Table == "" {
 		cfg.Table = "_dbump_log"
 	}
+	tableName += cfg.Table
+
 	return &Migrator{
 		conn:      conn,
-		tableName: cfg.Schema + cfg.Table,
+		cfg:       cfg,
+		tableName: tableName,
 	}
 }
 
 // Init is a method from Migrator interface.
 func (pg *Migrator) Init(ctx context.Context) error {
-	query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+	query := fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %s;
+CREATE TABLE IF NOT EXISTS %s (
 	version    BIGINT NOT NULL,
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL
-);`, pg.tableName)
+);`, pg.cfg.Schema, pg.tableName)
 	_, err := pg.conn.Exec(ctx, query)
 	return err
 }
