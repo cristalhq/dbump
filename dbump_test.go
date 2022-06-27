@@ -46,7 +46,7 @@ func TestRunCheck(t *testing.T) {
 
 func TestMigrateUp(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"exec", "SELECT 1;", "[]", "setversion", "1",
 		"exec", "SELECT 2;", "[]", "setversion", "2",
 		"exec", "SELECT 3;", "[]", "setversion", "3",
@@ -69,7 +69,7 @@ func TestMigrateUp(t *testing.T) {
 
 func TestMigrateUpWhenFull(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion", "unlockdb",
+		"lockdb", "init", "getversion", "unlockdb",
 	}
 
 	mm := &MockMigrator{
@@ -90,7 +90,7 @@ func TestMigrateUpWhenFull(t *testing.T) {
 func TestMigrateUpOne(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"begin",
 		"exec", "SELECT 4;", "[]", "setversion", "4",
 		"commit",
@@ -114,7 +114,7 @@ func TestMigrateUpOne(t *testing.T) {
 
 func TestMigrateDown(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"exec", "SELECT 50;", "[]", "setversion", "4",
 		"exec", "SELECT 40;", "[]", "setversion", "3",
 		"exec", "SELECT 30;", "[]", "setversion", "2",
@@ -141,7 +141,7 @@ func TestMigrateDown(t *testing.T) {
 
 func TestMigrateDownWhenEmpty(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion", "unlockdb",
+		"lockdb", "init", "getversion", "unlockdb",
 	}
 
 	mm := &MockMigrator{
@@ -162,7 +162,7 @@ func TestMigrateDownWhenEmpty(t *testing.T) {
 func TestMigrateDownOne(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"begin",
 		"exec", "SELECT 30;", "[]", "setversion", "2",
 		"commit",
@@ -187,7 +187,7 @@ func TestMigrateDownOne(t *testing.T) {
 func TestUseForce(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
-		"init", "lockdb", "unlockdb", "lockdb", "getversion",
+		"lockdb", "unlockdb", "lockdb", "init", "getversion",
 		"exec", "SELECT 4;", "[]", "setversion", "4",
 		"exec", "SELECT 5;", "[]", "setversion", "5",
 		"unlockdb",
@@ -224,7 +224,7 @@ func TestUseForce(t *testing.T) {
 
 func TestZigZag(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"exec", "SELECT 1;", "[]", "setversion", "1",
 		"exec", "SELECT 10;", "[]", "setversion", "0",
 		"exec", "SELECT 1;", "[]", "setversion", "1",
@@ -261,7 +261,7 @@ func TestZigZag(t *testing.T) {
 }
 
 func TestFailOnInitError(t *testing.T) {
-	wantLog := []string{"init"}
+	wantLog := []string{"lockdb", "init", "unlockdb"}
 	mm := &MockMigrator{
 		InitFn: func(ctx context.Context) error {
 			return errors.New("no access")
@@ -278,9 +278,7 @@ func TestFailOnInitError(t *testing.T) {
 }
 
 func TestFailOnLockDB(t *testing.T) {
-	wantLog := []string{
-		"init", "lockdb",
-	}
+	wantLog := []string{"lockdb"}
 	mm := &MockMigrator{
 		LockDBFn: func(ctx context.Context) (err error) {
 			return errors.New("no access")
@@ -299,7 +297,7 @@ func TestFailOnLockDB(t *testing.T) {
 func TestFailOnUnlockDB(t *testing.T) {
 	currVersion := 4
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"begin",
 		"exec", "SELECT 5;", "[]", "setversion", "5",
 		"commit",
@@ -325,7 +323,7 @@ func TestFailOnUnlockDB(t *testing.T) {
 
 func TestFailOnGetVersionError(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion", "unlockdb",
+		"lockdb", "init", "getversion", "unlockdb",
 	}
 	mm := &MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
@@ -344,7 +342,7 @@ func TestFailOnGetVersionError(t *testing.T) {
 
 func TestFailOnSetVersionError(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"begin",
 		"exec", "SELECT 1;", "[]", "setversion", "1",
 		"rollback",
@@ -367,7 +365,7 @@ func TestFailOnSetVersionError(t *testing.T) {
 
 func TestFailOnBegin(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"begin",
 		"unlockdb",
 	}
@@ -388,7 +386,7 @@ func TestFailOnBegin(t *testing.T) {
 
 func TestFailOnExec(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"begin",
 		"exec", "SELECT 1;", "[]",
 		"rollback",
@@ -411,7 +409,7 @@ func TestFailOnExec(t *testing.T) {
 
 func TestFailOnCommit(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"begin",
 		"exec", "SELECT 1;", "[]", "setversion", "1",
 		"commit",
@@ -435,7 +433,7 @@ func TestFailOnCommit(t *testing.T) {
 
 func TestFailOnRollback(t *testing.T) {
 	wantLog := []string{
-		"init", "lockdb", "getversion",
+		"lockdb", "init", "getversion",
 		"begin",
 		"exec", "SELECT 1;", "[]", "setversion", "1",
 		"commit",

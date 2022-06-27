@@ -145,9 +145,6 @@ func (m *mig) load() ([]*Migration, error) {
 }
 
 func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
-	if err := m.Init(ctx); err != nil {
-		return fmt.Errorf("init: %w", err)
-	}
 	if err := m.LockDB(ctx); err != nil {
 		if !m.UseForce {
 			return fmt.Errorf("lock db: %w", err)
@@ -166,6 +163,10 @@ func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
 		}
 	}()
 
+	err = m.Init(ctx)
+	if err != nil {
+		return fmt.Errorf("init: %w", err)
+	}
 	err = m.runMigrationsLocked(ctx, ms)
 	return err
 }
