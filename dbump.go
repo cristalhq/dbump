@@ -7,6 +7,11 @@ import (
 	"sort"
 )
 
+// ErrMigrationAlreadyLocked is returned only when migration lock is already hold.
+// This might be in a situation when previous dbump migration has not finished properly
+// or just someone already holds this lock. See Config.UseForce to force lock acquire.
+var ErrMigrationAlreadyLocked = errors.New("migration is locked already")
+
 // MigrationDelimiter separates apply and revert queries inside a migration step/file.
 // Is exported just to be used by https://github.com/cristalhq/dbumper
 const MigrationDelimiter = `--- apply above / revert below ---`
