@@ -37,30 +37,35 @@ func TestNonDefaultSchemaTable(t *testing.T) {
 		schema        string
 		table         string
 		wantTableName string
+		wantLockNum   int64
 	}{
 		{
 			name:          "all empty",
 			schema:        "",
 			table:         "",
 			wantTableName: "_dbump_log",
+			wantLockNum:   -3987518601082986461,
 		},
 		{
 			name:          "schema set",
 			schema:        "test_schema",
 			table:         "",
 			wantTableName: "test_schema._dbump_log",
+			wantLockNum:   1417388815471108263,
 		},
 		{
 			name:          "table set",
 			schema:        "",
 			table:         "test_table",
 			wantTableName: "test_table",
+			wantLockNum:   8712390964734167792,
 		},
 		{
 			name:          "schema and table set",
 			schema:        "test_schema",
 			table:         "test_table",
 			wantTableName: "test_schema.test_table",
+			wantLockNum:   4631047095544292572,
 		},
 	}
 
@@ -69,7 +74,8 @@ func TestNonDefaultSchemaTable(t *testing.T) {
 			Schema: tc.schema,
 			Table:  tc.table,
 		})
-		mustEqual(t, m.tableName, tc.wantTableName)
+		mustEqual(t, m.cfg.tableName, tc.wantTableName)
+		mustEqual(t, m.cfg.lockNum, tc.wantLockNum)
 	}
 }
 

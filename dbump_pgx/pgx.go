@@ -4,22 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/fnv"
 
 	"github.com/cristalhq/dbump"
 	"github.com/jackc/pgx/v4"
 )
 
-// to prevent multiple migrations running at the same time
-const lockNum int64 = 777_777_777
-
 var _ dbump.Migrator = &Migrator{}
 
 // Migrator to migrate Postgres.
 type Migrator struct {
-	conn      *pgx.Conn
-	tx        pgx.Tx
-	cfg       Config
-	tableName string
+	conn *pgx.Conn
+	tx   pgx.Tx
+	cfg  Config
 }
 
 // Config for the migrator.
@@ -28,23 +25,30 @@ type Config struct {
 	Schema string
 	// Table for the dbump version table. Default is empty which means "_dbump_log" table.
 	Table string
+
+	// [schema].table
+	tableName string
+	// to prevent multiple migrations running at the same time
+	lockNum int64
 }
 
 // NewMigrator instantiates new Migrator.
 func NewMigrator(conn *pgx.Conn, cfg Config) *Migrator {
-	var tableName string
 	if cfg.Schema != "" {
-		tableName += cfg.Schema + "."
+		cfg.tableName += cfg.Schema + "."
 	}
 	if cfg.Table == "" {
 		cfg.Table = "_dbump_log"
 	}
-	tableName += cfg.Table
+	cfg.tableName += cfg.Table
+
+	h := fnv.New64()
+	h.Write([]byte(cfg.tableName))
+	cfg.lockNum = int64(h.Sum64())
 
 	return &Migrator{
-		conn:      conn,
-		cfg:       cfg,
-		tableName: tableName,
+		conn: conn,
+		cfg:  cfg,
 	}
 }
 
@@ -54,26 +58,26 @@ func (pg *Migrator) Init(ctx context.Context) error {
 CREATE TABLE IF NOT EXISTS %s (
 	version    BIGINT NOT NULL,
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL
-);`, pg.cfg.Schema, pg.tableName)
+);`, pg.cfg.Schema, pg.cfg.tableName)
 	_, err := pg.conn.Exec(ctx, query)
 	return err
 }
 
 // LockDB is a method from Migrator interface.
 func (pg *Migrator) LockDB(ctx context.Context) error {
-	_, err := pg.conn.Exec(ctx, "SELECT pg_advisory_lock($1);", lockNum)
+	_, err := pg.conn.Exec(ctx, "SELECT pg_advisory_lock($1);", pg.cfg.lockNum)
 	return err
 }
 
 // UnlockDB is a method from Migrator interface.
 func (pg *Migrator) UnlockDB(ctx context.Context) error {
-	_, err := pg.conn.Exec(ctx, "SELECT pg_advisory_unlock($1);", lockNum)
+	_, err := pg.conn.Exec(ctx, "SELECT pg_advisory_unlock($1);", pg.cfg.lockNum)
 	return err
 }
 
 // Version is a method from Migrator interface.
 func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
-	query := fmt.Sprintf("SELECT version FROM %s ORDER BY created_at DESC LIMIT 1;", pg.tableName)
+	query := fmt.Sprintf("SELECT version FROM %s ORDER BY created_at DESC LIMIT 1;", pg.cfg.tableName)
 	var row pgx.Row
 	if pg.tx != nil {
 		row = pg.tx.QueryRow(ctx, query)
@@ -89,7 +93,7 @@ func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 
 // SetVersion is a method from Migrator interface.
 func (pg *Migrator) SetVersion(ctx context.Context, version int) error {
-	query := fmt.Sprintf("INSERT INTO %s (version, created_at) VALUES ($1, NOW());", pg.tableName)
+	query := fmt.Sprintf("INSERT INTO %s (version, created_at) VALUES ($1, NOW());", pg.cfg.tableName)
 	var err error
 	if pg.tx != nil {
 		_, err = pg.tx.Exec(ctx, query, version)
