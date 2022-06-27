@@ -179,7 +179,7 @@ func (m *mig) runMigrationsLocked(ctx context.Context, ms []*Migration) error {
 
 	for _, step := range m.prepareSteps(curr, target, ms) {
 		if err := m.execStep(ctx, step); err != nil {
-			return fmt.Errorf("exec: %w", err)
+			return err
 		}
 	}
 	return nil
@@ -193,13 +193,13 @@ func (m *mig) execStep(ctx context.Context, step step) error {
 }
 
 func (m *mig) execStepSafely(ctx context.Context, step step) (err error) {
-	if err := m.Migrator.Begin(ctx); err != nil {
+	if err := m.Begin(ctx); err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 
 	defer func() {
 		if err != nil {
-			if errRollback := m.Migrator.Rollback(ctx); errRollback != nil {
+			if errRollback := m.Rollback(ctx); errRollback != nil {
 				err = fmt.Errorf("(rollback tx: %v): %w", errRollback, err)
 			}
 		}
