@@ -230,6 +230,28 @@ func TestMigrateDrop(t *testing.T) {
 	mustEqual(t, mm.log, wantLog)
 }
 
+func TestLockless(t *testing.T) {
+	wantLog := []string{
+		"init",
+		"getversion",
+		"dostep", "{v:1 q:'SELECT 1;' notx:false}",
+		"dostep", "{v:2 q:'SELECT 2;' notx:false}",
+		"dostep", "{v:3 q:'SELECT 3;' notx:false}",
+		"dostep", "{v:4 q:'SELECT 4;' notx:false}",
+		"dostep", "{v:5 q:'SELECT 5;' notx:false}",
+	}
+
+	mm := &MockMigrator{}
+	cfg := Config{
+		Migrator: AsLocklessMigrator(mm),
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+	}
+
+	failIfErr(t, Run(context.Background(), cfg))
+	mustEqual(t, mm.log, wantLog)
+}
+
 func TestUseForce(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
