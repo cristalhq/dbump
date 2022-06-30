@@ -43,6 +43,13 @@ type Config struct {
 	// Going up does apply-revert-apply of each migration.
 	// Going down does revert-apply-revert of each migration.
 	ZigZag bool
+
+	// BeforeStep function will be invoked right before the DoStep for each step.
+	// Default is nil and means no-op.
+	BeforeStep func(ctx context.Context, step Step)
+	// AfterStep function will be invoked right after the DoStep for each step.
+	// Default is nil and means no-op.
+	AfterStep func(ctx context.Context, step Step)
 }
 
 // Migrator represents database over which we will run migrations.
@@ -118,6 +125,13 @@ func Run(ctx context.Context, config Config) error {
 		return errors.New("mode not set")
 	case config.Mode >= modeMaxPossible:
 		return fmt.Errorf("incorrect mode provided: %d", config.Mode)
+	}
+
+	if config.BeforeStep == nil {
+		config.BeforeStep = func(ctx context.Context, step Step) {}
+	}
+	if config.AfterStep == nil {
+		config.AfterStep = func(ctx context.Context, step Step) {}
 	}
 
 	m := mig{
@@ -203,9 +217,13 @@ func (m *mig) runMigrationsLocked(ctx context.Context, ms []*Migration) error {
 	}
 
 	for _, step := range m.prepareSteps(curr, target, ms) {
+		m.BeforeStep(ctx, step)
+
 		if err := m.DoStep(ctx, step); err != nil {
 			return err
 		}
+
+		m.AfterStep(ctx, step)
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package dbump
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -224,6 +225,40 @@ func TestMigrateDrop(t *testing.T) {
 		Migrator: mm,
 		Loader:   NewSliceLoader(testdataMigrations),
 		Mode:     ModeDrop,
+	}
+
+	failIfErr(t, Run(context.Background(), cfg))
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestBeforeAfterStep(t *testing.T) {
+	currVersion := 3
+	wantLog := []string{
+		"lockdb", "init", "getversion",
+		"before", "{v:4 q:'SELECT 4;' notx:false}",
+		"dostep", "{v:4 q:'SELECT 4;' notx:false}",
+		"after", "{v:4 q:'SELECT 4;' notx:false}",
+		"before", "{v:5 q:'SELECT 5;' notx:false}",
+		"dostep", "{v:5 q:'SELECT 5;' notx:false}",
+		"after", "{v:5 q:'SELECT 5;' notx:false}",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return currVersion, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+		BeforeStep: func(ctx context.Context, step Step) {
+			mm.log = append(mm.log, "before", fmt.Sprintf("{v:%d q:'%s' notx:%v}", step.Version, step.Query, step.DisableTx))
+		},
+		AfterStep: func(ctx context.Context, step Step) {
+			mm.log = append(mm.log, "after", fmt.Sprintf("{v:%d q:'%s' notx:%v}", step.Version, step.Query, step.DisableTx))
+		},
 	}
 
 	failIfErr(t, Run(context.Background(), cfg))
