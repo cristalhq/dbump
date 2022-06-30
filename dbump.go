@@ -57,6 +57,10 @@ type Migrator interface {
 	// and might be different between databases.
 	Init(ctx context.Context) error
 
+	// Drop is used only in ModeDrop to remove dbump database.
+	// Before drop all the migrations will be reverted (as for ModeDown).
+	Drop(ctx context.Context) error
+
 	// Version of the migration. Used only once in the beginning.
 	Version(ctx context.Context) (version int, err error)
 
@@ -94,6 +98,7 @@ const (
 	ModeUpOne
 	ModeDownOne
 	ModeRedo
+	ModeDrop
 	modeMaxPossible
 )
 
@@ -184,6 +189,10 @@ func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
 		return fmt.Errorf("init: %w", err)
 	}
 	err = m.runMigrationsLocked(ctx, ms)
+
+	if m.Mode == ModeDrop {
+		err = m.Drop(ctx)
+	}
 	return err
 }
 
@@ -207,7 +216,7 @@ func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (cur
 		return 0, 0, fmt.Errorf("get version: %w", err)
 	}
 
-	switch m.Config.Mode {
+	switch m.Mode {
 	case ModeUp:
 		target = migrations
 		if curr > target {
@@ -237,6 +246,9 @@ func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (cur
 			return 0, 0, errors.New("current is greater than migrations count")
 		}
 		target = curr
+
+	case ModeDrop:
+		target = 0
 
 	default:
 		panic("unreachable")
@@ -302,6 +314,7 @@ func (llm *locklessMigrator) LockDB(ctx context.Context) error   { return nil }
 func (llm *locklessMigrator) UnlockDB(ctx context.Context) error { return nil }
 
 func (llm *locklessMigrator) Init(ctx context.Context) error { return llm.m.Init(ctx) }
+func (llm *locklessMigrator) Drop(ctx context.Context) error { return llm.m.Drop(ctx) }
 
 func (llm *locklessMigrator) Version(ctx context.Context) (version int, err error) {
 	return llm.m.Version(ctx)

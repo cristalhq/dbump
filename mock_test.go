@@ -13,6 +13,7 @@ type MockMigrator struct {
 	LockDBFn   func(ctx context.Context) error
 	UnlockDBFn func(ctx context.Context) error
 	InitFn     func(ctx context.Context) error
+	DropFn     func(ctx context.Context) error
 	VersionFn  func(ctx context.Context) (version int, err error)
 	DoStepFn   func(ctx context.Context, step Step) error
 }
@@ -39,6 +40,14 @@ func (mm *MockMigrator) Init(ctx context.Context) error {
 		return nil
 	}
 	return mm.InitFn(ctx)
+}
+
+func (mm *MockMigrator) Drop(ctx context.Context) error {
+	mm.log = append(mm.log, "drop")
+	if mm.DropFn == nil {
+		return nil
+	}
+	return mm.DropFn(ctx)
 }
 
 func (mm *MockMigrator) Version(ctx context.Context) (version int, err error) {

@@ -204,6 +204,32 @@ func TestMigrateRedo(t *testing.T) {
 	mustEqual(t, mm.log, wantLog)
 }
 
+func TestMigrateDrop(t *testing.T) {
+	currVersion := 3
+	wantLog := []string{
+		"lockdb", "init", "getversion",
+		"dostep", "{v:2 q:'SELECT 30;' notx:false}",
+		"dostep", "{v:1 q:'SELECT 20;' notx:false}",
+		"dostep", "{v:0 q:'SELECT 10;' notx:false}",
+		"drop",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return currVersion, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeDrop,
+	}
+
+	failIfErr(t, Run(context.Background(), cfg))
+	mustEqual(t, mm.log, wantLog)
+}
+
 func TestUseForce(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
