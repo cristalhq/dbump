@@ -93,6 +93,7 @@ const (
 	ModeDown
 	ModeUpOne
 	ModeDownOne
+	ModeRedo
 	modeMaxPossible
 )
 
@@ -231,6 +232,12 @@ func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (cur
 		}
 		target = curr - 1
 
+	case ModeRedo:
+		if curr > migrations {
+			return 0, 0, errors.New("current is greater than migrations count")
+		}
+		target = curr
+
 	default:
 		panic("unreachable")
 	}
@@ -238,6 +245,13 @@ func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (cur
 }
 
 func (m *mig) prepareSteps(curr, target int, ms []*Migration) []Step {
+	if m.Mode == ModeRedo {
+		return []Step{
+			ms[curr-1].toStep(false, m.DisableTx),
+			ms[curr-1].toStep(true, m.DisableTx),
+		}
+	}
+
 	if curr == target {
 		return nil
 	}

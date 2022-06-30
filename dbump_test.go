@@ -180,6 +180,30 @@ func TestMigrateDownOne(t *testing.T) {
 	mustEqual(t, mm.log, wantLog)
 }
 
+func TestMigrateRedo(t *testing.T) {
+	currVersion := 3
+	wantLog := []string{
+		"lockdb", "init", "getversion",
+		"dostep", "{v:2 q:'SELECT 30;' notx:false}",
+		"dostep", "{v:3 q:'SELECT 3;' notx:false}",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return currVersion, nil
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeRedo,
+	}
+
+	failIfErr(t, Run(context.Background(), cfg))
+	mustEqual(t, mm.log, wantLog)
+}
+
 func TestUseForce(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
