@@ -15,7 +15,6 @@ var _ dbump.Migrator = &Migrator{}
 // Migrator to migrate Postgres.
 type Migrator struct {
 	conn *pgx.Conn
-	tx   pgx.Tx
 	cfg  Config
 }
 
@@ -78,12 +77,7 @@ func (pg *Migrator) UnlockDB(ctx context.Context) error {
 // Version is a method from Migrator interface.
 func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 	query := fmt.Sprintf("SELECT version FROM %s ORDER BY created_at DESC LIMIT 1;", pg.cfg.tableName)
-	var row pgx.Row
-	if pg.tx != nil {
-		row = pg.tx.QueryRow(ctx, query)
-	} else {
-		row = pg.conn.QueryRow(ctx, query)
-	}
+	row := pg.conn.QueryRow(ctx, query)
 	err = row.Scan(&version)
 	if err != nil && errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
@@ -91,42 +85,23 @@ func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 	return version, err
 }
 
-// SetVersion is a method from Migrator interface.
-func (pg *Migrator) SetVersion(ctx context.Context, version int) error {
-	query := fmt.Sprintf("INSERT INTO %s (version, created_at) VALUES ($1, NOW());", pg.cfg.tableName)
-	var err error
-	if pg.tx != nil {
-		_, err = pg.tx.Exec(ctx, query, version)
-	} else {
-		_, err = pg.conn.Exec(ctx, query, version)
+// Version is a method from Migrator interface.
+func (pg *Migrator) DoStep(ctx context.Context, step dbump.Step) error {
+	if step.DisableTx {
+		if _, err := pg.conn.Exec(ctx, step.Query); err != nil {
+			return err
+		}
+		query := fmt.Sprintf("INSERT INTO %s (version, created_at) VALUES ($1, NOW());", pg.cfg.tableName)
+		_, err := pg.conn.Exec(ctx, query, step.Version)
+		return err
 	}
-	return err
-}
 
-// Begin is a method from Migrator interface.
-func (pg *Migrator) Begin(ctx context.Context) error {
-	var err error
-	pg.tx, err = pg.conn.Begin(ctx)
-	return err
-}
-
-// Commit is a method from Migrator interface.
-func (pg *Migrator) Commit(ctx context.Context) error {
-	return pg.tx.Commit(ctx)
-}
-
-// Rollback is a method from Migrator interface.
-func (pg *Migrator) Rollback(ctx context.Context) error {
-	return pg.tx.Rollback(ctx)
-}
-
-// Exec is a method from Migrator interface.
-func (pg *Migrator) Exec(ctx context.Context, query string, args ...interface{}) error {
-	var err error
-	if pg.tx != nil {
-		_, err = pg.tx.Exec(ctx, query, args...)
-	} else {
-		_, err = pg.conn.Exec(ctx, query, args...)
-	}
-	return err
+	return pg.conn.BeginFunc(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, step.Query); err != nil {
+			return err
+		}
+		query := fmt.Sprintf("INSERT INTO %s (version, created_at) VALUES ($1, NOW());", pg.cfg.tableName)
+		_, err := tx.Exec(ctx, query, step.Version)
+		return err
+	})
 }
