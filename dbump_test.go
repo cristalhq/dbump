@@ -47,11 +47,11 @@ func TestRunCheck(t *testing.T) {
 func TestMigrateUp(t *testing.T) {
 	wantLog := []string{
 		"lockdb", "init", "getversion",
-		"exec", "SELECT 1;", "[]", "setversion", "1",
-		"exec", "SELECT 2;", "[]", "setversion", "2",
-		"exec", "SELECT 3;", "[]", "setversion", "3",
-		"exec", "SELECT 4;", "[]", "setversion", "4",
-		"exec", "SELECT 5;", "[]", "setversion", "5",
+		"dostep", "{v:1 q:'SELECT 1;' notx:true}",
+		"dostep", "{v:2 q:'SELECT 2;' notx:true}",
+		"dostep", "{v:3 q:'SELECT 3;' notx:true}",
+		"dostep", "{v:4 q:'SELECT 4;' notx:true}",
+		"dostep", "{v:5 q:'SELECT 5;' notx:true}",
 		"unlockdb",
 	}
 
@@ -91,9 +91,7 @@ func TestMigrateUpOne(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
 		"lockdb", "init", "getversion",
-		"begin",
-		"exec", "SELECT 4;", "[]", "setversion", "4",
-		"commit",
+		"dostep", "{v:4 q:'SELECT 4;' notx:false}",
 		"unlockdb",
 	}
 
@@ -115,11 +113,11 @@ func TestMigrateUpOne(t *testing.T) {
 func TestMigrateDown(t *testing.T) {
 	wantLog := []string{
 		"lockdb", "init", "getversion",
-		"exec", "SELECT 50;", "[]", "setversion", "4",
-		"exec", "SELECT 40;", "[]", "setversion", "3",
-		"exec", "SELECT 30;", "[]", "setversion", "2",
-		"exec", "SELECT 20;", "[]", "setversion", "1",
-		"exec", "SELECT 10;", "[]", "setversion", "0",
+		"dostep", "{v:4 q:'SELECT 50;' notx:true}",
+		"dostep", "{v:3 q:'SELECT 40;' notx:true}",
+		"dostep", "{v:2 q:'SELECT 30;' notx:true}",
+		"dostep", "{v:1 q:'SELECT 20;' notx:true}",
+		"dostep", "{v:0 q:'SELECT 10;' notx:true}",
 		"unlockdb",
 	}
 
@@ -163,9 +161,7 @@ func TestMigrateDownOne(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
 		"lockdb", "init", "getversion",
-		"begin",
-		"exec", "SELECT 30;", "[]", "setversion", "2",
-		"commit",
+		"dostep", "{v:2 q:'SELECT 30;' notx:false}",
 		"unlockdb",
 	}
 
@@ -188,8 +184,8 @@ func TestUseForce(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
 		"lockdb", "unlockdb", "lockdb", "init", "getversion",
-		"exec", "SELECT 4;", "[]", "setversion", "4",
-		"exec", "SELECT 5;", "[]", "setversion", "5",
+		"dostep", "{v:4 q:'SELECT 4;' notx:true}",
+		"dostep", "{v:5 q:'SELECT 5;' notx:true}",
 		"unlockdb",
 	}
 
@@ -225,25 +221,25 @@ func TestUseForce(t *testing.T) {
 func TestZigZag(t *testing.T) {
 	wantLog := []string{
 		"lockdb", "init", "getversion",
-		"exec", "SELECT 1;", "[]", "setversion", "1",
-		"exec", "SELECT 10;", "[]", "setversion", "0",
-		"exec", "SELECT 1;", "[]", "setversion", "1",
+		"dostep", "{v:1 q:'SELECT 1;' notx:true}",
+		"dostep", "{v:0 q:'SELECT 10;' notx:true}",
+		"dostep", "{v:1 q:'SELECT 1;' notx:true}",
 
-		"exec", "SELECT 2;", "[]", "setversion", "2",
-		"exec", "SELECT 20;", "[]", "setversion", "1",
-		"exec", "SELECT 2;", "[]", "setversion", "2",
+		"dostep", "{v:2 q:'SELECT 2;' notx:true}",
+		"dostep", "{v:1 q:'SELECT 20;' notx:true}",
+		"dostep", "{v:2 q:'SELECT 2;' notx:true}",
 
-		"exec", "SELECT 3;", "[]", "setversion", "3",
-		"exec", "SELECT 30;", "[]", "setversion", "2",
-		"exec", "SELECT 3;", "[]", "setversion", "3",
+		"dostep", "{v:3 q:'SELECT 3;' notx:true}",
+		"dostep", "{v:2 q:'SELECT 30;' notx:true}",
+		"dostep", "{v:3 q:'SELECT 3;' notx:true}",
 
-		"exec", "SELECT 4;", "[]", "setversion", "4",
-		"exec", "SELECT 40;", "[]", "setversion", "3",
-		"exec", "SELECT 4;", "[]", "setversion", "4",
+		"dostep", "{v:4 q:'SELECT 4;' notx:true}",
+		"dostep", "{v:3 q:'SELECT 40;' notx:true}",
+		"dostep", "{v:4 q:'SELECT 4;' notx:true}",
 
-		"exec", "SELECT 5;", "[]", "setversion", "5",
-		"exec", "SELECT 50;", "[]", "setversion", "4",
-		"exec", "SELECT 5;", "[]", "setversion", "5",
+		"dostep", "{v:5 q:'SELECT 5;' notx:true}",
+		"dostep", "{v:4 q:'SELECT 50;' notx:true}",
+		"dostep", "{v:5 q:'SELECT 5;' notx:true}",
 		"unlockdb",
 	}
 
@@ -298,9 +294,7 @@ func TestFailOnUnlockDB(t *testing.T) {
 	currVersion := 4
 	wantLog := []string{
 		"lockdb", "init", "getversion",
-		"begin",
-		"exec", "SELECT 5;", "[]", "setversion", "5",
-		"commit",
+		"dostep", "{v:5 q:'SELECT 5;' notx:false}",
 		"unlockdb",
 	}
 	mm := &MockMigrator{
@@ -340,112 +334,15 @@ func TestFailOnGetVersionError(t *testing.T) {
 	mustEqual(t, mm.log, wantLog)
 }
 
-func TestFailOnSetVersionError(t *testing.T) {
+func TestFailOnDoStepError(t *testing.T) {
 	wantLog := []string{
 		"lockdb", "init", "getversion",
-		"begin",
-		"exec", "SELECT 1;", "[]", "setversion", "1",
-		"rollback",
+		"dostep", "{v:1 q:'SELECT 1;' notx:false}",
 		"unlockdb",
 	}
 	mm := &MockMigrator{
-		SetVersionFn: func(ctx context.Context, version int) error {
+		DoStepFn: func(ctx context.Context, step Step) error {
 			return errors.New("no access")
-		},
-	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeUp,
-	}
-
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
-}
-
-func TestFailOnBegin(t *testing.T) {
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"begin",
-		"unlockdb",
-	}
-	mm := &MockMigrator{
-		BeginFn: func(ctx context.Context) error {
-			return errors.New("timeout")
-		},
-	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeUp,
-	}
-
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
-}
-
-func TestFailOnExec(t *testing.T) {
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"begin",
-		"exec", "SELECT 1;", "[]",
-		"rollback",
-		"unlockdb",
-	}
-	mm := &MockMigrator{
-		ExecFn: func(ctx context.Context, query string, args ...interface{}) error {
-			return errors.New("syntax error")
-		},
-	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeUp,
-	}
-
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
-}
-
-func TestFailOnCommit(t *testing.T) {
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"begin",
-		"exec", "SELECT 1;", "[]", "setversion", "1",
-		"commit",
-		"rollback",
-		"unlockdb",
-	}
-	mm := &MockMigrator{
-		CommitFn: func(ctx context.Context) error {
-			return errors.New("constraint violation")
-		},
-	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeUp,
-	}
-
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
-}
-
-func TestFailOnRollback(t *testing.T) {
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"begin",
-		"exec", "SELECT 1;", "[]", "setversion", "1",
-		"commit",
-		"rollback",
-		"unlockdb",
-	}
-	mm := &MockMigrator{
-		CommitFn: func(ctx context.Context) error {
-			return errors.New("constraint violation")
-		},
-		RollbackFn: func(ctx context.Context) error {
-			return errors.New("timeout")
 		},
 	}
 	cfg := Config{

@@ -3,7 +3,6 @@ package dbump
 import (
 	"context"
 	"fmt"
-	"strconv"
 )
 
 var _ Migrator = &MockMigrator{}
@@ -11,25 +10,11 @@ var _ Migrator = &MockMigrator{}
 type MockMigrator struct {
 	log []string
 
-	InitFn     func(ctx context.Context) error
 	LockDBFn   func(ctx context.Context) error
 	UnlockDBFn func(ctx context.Context) error
-
-	VersionFn    func(ctx context.Context) (version int, err error)
-	SetVersionFn func(ctx context.Context, version int) error
-
-	BeginFn    func(ctx context.Context) error
-	CommitFn   func(ctx context.Context) error
-	RollbackFn func(ctx context.Context) error
-	ExecFn     func(ctx context.Context, query string, args ...interface{}) error
-}
-
-func (mm *MockMigrator) Init(ctx context.Context) error {
-	mm.log = append(mm.log, "init")
-	if mm.InitFn == nil {
-		return nil
-	}
-	return mm.InitFn(ctx)
+	InitFn     func(ctx context.Context) error
+	VersionFn  func(ctx context.Context) (version int, err error)
+	DoStepFn   func(ctx context.Context, step Step) error
 }
 
 func (mm *MockMigrator) LockDB(ctx context.Context) error {
@@ -48,6 +33,14 @@ func (mm *MockMigrator) UnlockDB(ctx context.Context) error {
 	return mm.UnlockDBFn(ctx)
 }
 
+func (mm *MockMigrator) Init(ctx context.Context) error {
+	mm.log = append(mm.log, "init")
+	if mm.InitFn == nil {
+		return nil
+	}
+	return mm.InitFn(ctx)
+}
+
 func (mm *MockMigrator) Version(ctx context.Context) (version int, err error) {
 	mm.log = append(mm.log, "getversion")
 	if mm.VersionFn == nil {
@@ -56,42 +49,12 @@ func (mm *MockMigrator) Version(ctx context.Context) (version int, err error) {
 	return mm.VersionFn(ctx)
 }
 
-func (mm *MockMigrator) SetVersion(ctx context.Context, version int) error {
-	mm.log = append(mm.log, "setversion", strconv.Itoa(version))
-	if mm.SetVersionFn == nil {
+func (mm *MockMigrator) DoStep(ctx context.Context, step Step) error {
+	mm.log = append(mm.log, "dostep", fmt.Sprintf("{v:%d q:'%s' notx:%v}", step.Version, step.Query, step.DisableTx))
+	if mm.DoStepFn == nil {
 		return nil
 	}
-	return mm.SetVersionFn(ctx, version)
-}
-
-func (mm *MockMigrator) Begin(ctx context.Context) error {
-	mm.log = append(mm.log, "begin")
-	if mm.BeginFn == nil {
-		return nil
-	}
-	return mm.BeginFn(ctx)
-}
-func (mm *MockMigrator) Commit(ctx context.Context) error {
-	mm.log = append(mm.log, "commit")
-	if mm.CommitFn == nil {
-		return nil
-	}
-	return mm.CommitFn(ctx)
-}
-func (mm *MockMigrator) Rollback(ctx context.Context) error {
-	mm.log = append(mm.log, "rollback")
-	if mm.RollbackFn == nil {
-		return nil
-	}
-	return mm.RollbackFn(ctx)
-}
-
-func (mm *MockMigrator) Exec(ctx context.Context, query string, args ...interface{}) error {
-	mm.log = append(mm.log, "exec", query, fmt.Sprintf("%+v", args))
-	if mm.ExecFn == nil {
-		return nil
-	}
-	return mm.ExecFn(ctx, query, args...)
+	return mm.DoStepFn(ctx, step)
 }
 
 type MockLoader struct {
