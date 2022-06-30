@@ -47,17 +47,31 @@ type Config struct {
 
 // Migrator represents database over which we will run migrations.
 type Migrator interface {
-	Init(ctx context.Context) error
+	// LockDB to prevent running other migrators at the same time.
 	LockDB(ctx context.Context) error
+	// UnlockDB to allow running other migrators later.
 	UnlockDB(ctx context.Context) error
+	// Init the dbump database where database state is saved.
+	// What is created by this method completely depends on migrator implementation
+	// and might be different between databases.
+	Init(ctx context.Context) error
 
+	// Version of the migration. Used only once in the beginning.
 	Version(ctx context.Context) (version int, err error)
+	// SetVersion is run after each migration.
 	SetVersion(ctx context.Context, version int) error
 
+	// Begin the transaction before migration.
+	// Might be no-op if DisableTx is set or transaction are not supported by database.
 	Begin(ctx context.Context) error
+	// Commit the transaction after migration.
+	// Might be no-op if DisableTx is set or transaction are not supported by database.
 	Commit(ctx context.Context) error
+	// Rollback the transaction on migration fail.
+	// Might be no-op if DisableTx is set or transaction are not supported by database.
 	Rollback(ctx context.Context) error
 
+	// Exec the given query and params.
 	Exec(ctx context.Context, query string, args ...interface{}) error
 }
 
