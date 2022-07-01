@@ -75,3 +75,9 @@ func TestSliceLoader(t *testing.T) {
 		mustEqual(t, migs[i], want[i])
 	}
 }
+
+func TestBadFormat(t *testing.T) {
+	loader := NewFileSysLoader(testdata, "testdata/bad")
+	_, err := loader.Load()
+	failIfOk(t, err)
+}

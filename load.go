@@ -1,6 +1,7 @@
 package dbump
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -10,7 +11,6 @@ import (
 )
 
 type FS interface {
-	fs.FS
 	fs.ReadDirFS
 	fs.ReadFileFS
 }
@@ -116,33 +116,35 @@ func loadMigrationFromFS(fsys FS, path, id, name string) (*Migration, error) {
 		return nil, err
 	}
 
-	m := parseMigration(body)
+	m, err := parseMigration(body)
+	if err != nil {
+		return nil, err
+	}
 	m.ID = int(n)
 	m.Name = name
 	return m, nil
 }
 
-func parseMigration(body []byte) *Migration {
-	// TODO(oleg): get name from magic comment
-	parts := strings.SplitN(string(body), MigrationDelimiter, 2)
-	applySQL := strings.TrimSpace(parts[0])
+func parseMigration(body []byte) (*Migration, error) {
+	parts := strings.Split(string(body), MigrationDelimiter)
 
-	var revertSQL string
-	if len(parts) == 2 {
-		revertSQL = strings.TrimSpace(parts[1])
+	if size := len(parts); size != 2 {
+		return nil, fmt.Errorf("should have 2 parts separated by MigrationDelimiter but got: %d", size)
 	}
+	applySQL := strings.TrimSpace(parts[0])
+	revertSQL := strings.TrimSpace(parts[1])
 
 	return &Migration{
 		Apply:  applySQL,
 		Revert: revertSQL,
-	}
+	}, nil
 }
 
 type osFS struct{}
 
 // Open implements dbump.FS interface.
 func (osFS) Open(name string) (fs.File, error) {
-	return os.Open(name)
+	panic("unreachable")
 }
 
 // ReadDir implements dbump.FS interface.
