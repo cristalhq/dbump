@@ -104,7 +104,7 @@ func TestMigrateUp(t *testing.T) {
 			Table:  "TestMigrateUp",
 		}),
 		Loader: dbump.NewSliceLoader(migrations),
-		Mode:   dbump.ModeUp,
+		Mode:   dbump.ModeApplyAll,
 	}
 
 	failIfErr(t, dbump.Run(context.Background(), cfg))

@@ -39,11 +39,9 @@ func NewMigrator(conn *pgx.Conn, cfg Config) *Migrator {
 	if cfg.Table == "" {
 		cfg.Table = "_dbump_log"
 	}
-	cfg.tableName += cfg.Table
 
-	h := fnv.New64()
-	h.Write([]byte(cfg.tableName))
-	cfg.lockNum = int64(h.Sum64())
+	cfg.tableName += cfg.Table
+	cfg.lockNum = hashTableName(cfg.tableName)
 
 	return &Migrator{
 		conn: conn,
@@ -58,6 +56,13 @@ CREATE TABLE IF NOT EXISTS %s (
 	version    BIGINT NOT NULL,
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );`, pg.cfg.Schema, pg.cfg.tableName)
+	_, err := pg.conn.Exec(ctx, query)
+	return err
+}
+
+// Drop is a method from Migrator interface.
+func (pg *Migrator) Drop(ctx context.Context) error {
+	query := fmt.Sprintf(`DROP TABLE IF EXISTS %s;`, pg.cfg.tableName)
 	_, err := pg.conn.Exec(ctx, query)
 	return err
 }
@@ -104,4 +109,10 @@ func (pg *Migrator) DoStep(ctx context.Context, step dbump.Step) error {
 		_, err := tx.Exec(ctx, query, step.Version)
 		return err
 	})
+}
+
+func hashTableName(s string) int64 {
+	h := fnv.New64()
+	h.Write([]byte(s))
+	return int64(h.Sum64())
 }
