@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 )
 
 // ErrMigrationAlreadyLocked is returned only when migration lock is already hold.
@@ -28,6 +29,10 @@ type Config struct {
 	// Default is zero ModeNotSet (zero value) which is an incorrect value.
 	// Set mode explicitly to show how migration should be done.
 	Mode MigratorMode
+
+	// Timeout per migration step. Default is 0 which means no timeout.
+	// Only Migrator.DoStep method will be bounded with this timeout.
+	Timeout time.Duration
 
 	// DisableTx will run every migration not in a transaction.
 	// This completely depends on a specific Migrator implementation
@@ -219,13 +224,22 @@ func (m *mig) runMigrationsLocked(ctx context.Context, ms []*Migration) error {
 	for _, step := range m.prepareSteps(curr, target, ms) {
 		m.BeforeStep(ctx, step)
 
-		if err := m.DoStep(ctx, step); err != nil {
+		if err := m.step(ctx, step); err != nil {
 			return err
 		}
 
 		m.AfterStep(ctx, step)
 	}
 	return nil
+}
+
+func (m *mig) step(ctx context.Context, step Step) error {
+	if m.Timeout != 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, m.Timeout)
+		defer cancel()
+	}
+	return m.DoStep(ctx, step)
 }
 
 func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (curr, target int, err error) {

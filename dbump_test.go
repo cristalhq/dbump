@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestRunCheck(t *testing.T) {
@@ -262,6 +263,34 @@ func TestBeforeAfterStep(t *testing.T) {
 	}
 
 	failIfErr(t, Run(context.Background(), cfg))
+	mustEqual(t, mm.log, wantLog)
+}
+
+func TestTimeout(t *testing.T) {
+	wantLog := []string{
+		"lockdb", "init", "getversion",
+		"dostep", "{v:1 q:'SELECT 1;' notx:false}",
+		"unlockdb",
+	}
+
+	mm := &MockMigrator{
+		DoStepFn: func(ctx context.Context, step Step) error {
+			select {
+			case <-time.After(30 * time.Second):
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		},
+	}
+	cfg := Config{
+		Migrator: mm,
+		Loader:   NewSliceLoader(testdataMigrations),
+		Mode:     ModeUp,
+		Timeout:  20 * time.Millisecond,
+	}
+
+	failIfOk(t, Run(context.Background(), cfg))
 	mustEqual(t, mm.log, wantLog)
 }
 
