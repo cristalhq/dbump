@@ -43,7 +43,7 @@ ctx := context.Background()
 cfg := dbump.Config{
 	Migrator: dbump_pg.NewMigrator(db),
 	Loader:   dbump.NewFileSysLoader(embed, "/"),
-	Mode:     dbump.ModeUp,
+	Mode:     dbump.ModeApplyAll,
 }
 
 err := dbump.Run(ctx, cfg)

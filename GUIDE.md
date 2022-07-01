@@ -22,13 +22,13 @@ Just do: `go get github.com/cristalhq/dbump/dbump_XXX` with a specific `XXX` and
 
 | Mode | Description |
 |---|---|
-| ModeNotSet  | Default value in config, should not be used.
-| ModeUp      | Apply all the migrations that weren't applied yet.
-| ModeDown    | Revert all the migrations that were applied.
-| ModeUpOne   | Apply only 1 migration.
-| ModeDownOne | Revert only current migration.
-| ModeRedo    | Revert and apply again current migration.
-| ModeDrop    | Revert all migrations and remove `dbump` table.
+| ModeNotSet    | Default value in config, should not be used.
+| ModeApplyAll  | Apply all the migrations that weren't applied yet.
+| ModeApplyN    | Apply only 1 migration.
+| ModeRevertN   | Revert only current migration.
+| ModeRevertAll | Revert all the migrations that were applied.
+| ModeRedo      | Revert and apply again current migration.
+| ModeDrop      | Revert all migrations and remove `dbump` table.
 
 ## ZigZag mode
 

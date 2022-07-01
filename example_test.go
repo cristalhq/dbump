@@ -14,7 +14,7 @@ func ExampleMigrator() {
 	err := dbump.Run(ctx, dbump.Config{
 		Migrator: m,
 		Loader:   l,
-		Mode:     dbump.ModeUp,
+		Mode:     dbump.ModeApplyAll,
 	})
 	if err != nil {
 		panic(err)

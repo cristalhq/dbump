@@ -30,6 +30,10 @@ type Config struct {
 	// Set mode explicitly to show how migration should be done.
 	Mode MigratorMode
 
+	// Num is a value for ModeApplyN or ModeRevertN modes.
+	// Must be greater than 0 for this two modes.
+	Num int
+
 	// Timeout per migration step. Default is 0 which means no timeout.
 	// Only Migrator.DoStep method will be bounded with this timeout.
 	Timeout time.Duration
@@ -70,7 +74,7 @@ type Migrator interface {
 	Init(ctx context.Context) error
 
 	// Drop is used only in ModeDrop to remove dbump database.
-	// Before drop all the migrations will be reverted (as for ModeDown).
+	// Before drop all the migrations will be reverted (as for ModeRevertAll).
 	Drop(ctx context.Context) error
 
 	// Version of the migration. Used only once in the beginning.
@@ -105,10 +109,10 @@ type MigratorMode int
 
 const (
 	ModeNotSet MigratorMode = iota
-	ModeUp
-	ModeDown
-	ModeUpOne
-	ModeDownOne
+	ModeApplyAll
+	ModeApplyN
+	ModeRevertN
+	ModeRevertAll
 	ModeRedo
 	ModeDrop
 	modeMaxPossible
@@ -130,6 +134,8 @@ func Run(ctx context.Context, config Config) error {
 		return errors.New("mode not set")
 	case config.Mode >= modeMaxPossible:
 		return fmt.Errorf("incorrect mode provided: %d", config.Mode)
+	case config.Num <= 0 && (config.Mode == ModeApplyN || config.Mode == ModeRevertN):
+		return fmt.Errorf("num must be greater than 0: %d", config.Num)
 	}
 
 	if config.BeforeStep == nil {
@@ -249,29 +255,29 @@ func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (cur
 	}
 
 	switch m.Mode {
-	case ModeUp:
+	case ModeApplyAll:
 		target = migrations
 		if curr > target {
 			return 0, 0, errors.New("current is greater than target")
 		}
 
-	case ModeDown:
-		if curr > migrations {
-			return 0, 0, errors.New("current is greater than migrations count")
-		}
-		target = 0
-
-	case ModeUpOne:
-		target = curr + 1
+	case ModeApplyN:
+		target = curr + m.Num
 		if target > migrations {
 			return 0, 0, errors.New("target is greater than migrations count")
 		}
 
-	case ModeDownOne:
+	case ModeRevertN:
 		if curr > migrations {
 			return 0, 0, errors.New("current is greater than migrations count")
 		}
-		target = curr - 1
+		target = curr - m.Num
+
+	case ModeRevertAll:
+		if curr > migrations {
+			return 0, 0, errors.New("current is greater than migrations count")
+		}
+		target = 0
 
 	case ModeRedo:
 		if curr > migrations {
