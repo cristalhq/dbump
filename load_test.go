@@ -1,12 +1,14 @@
-package dbump
+package dbump_test
 
 import (
 	"embed"
 	"testing"
+
+	"github.com/cristalhq/dbump"
 )
 
 func TestDiskLoader(t *testing.T) {
-	loader := NewDiskLoader("./testdata")
+	loader := dbump.NewDiskLoader("./testdata")
 	migs, err := loader.Load()
 	failIfErr(t, err)
 
@@ -19,7 +21,7 @@ func TestDiskLoader(t *testing.T) {
 }
 
 func TestDiskLoaderSubdir(t *testing.T) {
-	loader := NewDiskLoader("./testdata/subdir")
+	loader := dbump.NewDiskLoader("./testdata/subdir")
 	migs, err := loader.Load()
 	failIfErr(t, err)
 
@@ -35,7 +37,7 @@ func TestDiskLoaderSubdir(t *testing.T) {
 var testdata embed.FS
 
 func TestEmbedLoader(t *testing.T) {
-	loader := NewFileSysLoader(testdata, "testdata")
+	loader := dbump.NewFileSysLoader(testdata, "testdata")
 	migs, err := loader.Load()
 	failIfErr(t, err)
 
@@ -48,7 +50,7 @@ func TestEmbedLoader(t *testing.T) {
 }
 
 func TestEmbedLoaderSubdir(t *testing.T) {
-	loader := NewFileSysLoader(testdata, "testdata/subdir")
+	loader := dbump.NewFileSysLoader(testdata, "testdata/subdir")
 	migs, err := loader.Load()
 	failIfErr(t, err)
 
@@ -62,7 +64,7 @@ func TestEmbedLoaderSubdir(t *testing.T) {
 
 func TestSliceLoader(t *testing.T) {
 	size := len(testdataMigrations)
-	loader := NewSliceLoader(testdataMigrations[:size-1])
+	loader := dbump.NewSliceLoader(testdataMigrations[:size-1])
 	loader.AddMigration(testdataMigrations[size-1])
 
 	migs, err := loader.Load()
@@ -77,7 +79,7 @@ func TestSliceLoader(t *testing.T) {
 }
 
 func TestBadFormat(t *testing.T) {
-	loader := NewFileSysLoader(testdata, "testdata/bad")
+	loader := dbump.NewFileSysLoader(testdata, "testdata/bad")
 	_, err := loader.Load()
 	failIfOk(t, err)
 }

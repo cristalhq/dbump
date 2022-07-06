@@ -1,11 +1,15 @@
-package dbump
+package tests
 
 import (
 	"context"
 	"fmt"
+
+	"github.com/cristalhq/dbump"
 )
 
-var _ Migrator = &MockMigrator{}
+const mockDoStepFmt = "{v:%d q:'%s' notx:%v}"
+
+var _ dbump.Migrator = &MockMigrator{}
 
 type MockMigrator struct {
 	log []string
@@ -15,8 +19,25 @@ type MockMigrator struct {
 	InitFn     func(ctx context.Context) error
 	DropFn     func(ctx context.Context) error
 	VersionFn  func(ctx context.Context) (version int, err error)
-	DoStepFn   func(ctx context.Context, step Step) error
+	DoStepFn   func(ctx context.Context, step dbump.Step) error
 }
+
+func NewMockMigrator(m dbump.Migrator) *MockMigrator {
+	if m == nil {
+		return &MockMigrator{}
+	}
+	return &MockMigrator{
+		LockDBFn:   m.LockDB,
+		UnlockDBFn: m.UnlockDB,
+		InitFn:     m.Init,
+		DropFn:     m.Drop,
+		VersionFn:  m.Version,
+		DoStepFn:   m.DoStep,
+	}
+}
+
+func (mm *MockMigrator) Log() []string      { return mm.log }
+func (mm *MockMigrator) LogAdd(s ...string) { mm.log = append(mm.log, s...) }
 
 func (mm *MockMigrator) LockDB(ctx context.Context) error {
 	mm.log = append(mm.log, "lockdb")
@@ -58,18 +79,10 @@ func (mm *MockMigrator) Version(ctx context.Context) (version int, err error) {
 	return mm.VersionFn(ctx)
 }
 
-func (mm *MockMigrator) DoStep(ctx context.Context, step Step) error {
-	mm.log = append(mm.log, "dostep", fmt.Sprintf("{v:%d q:'%s' notx:%v}", step.Version, step.Query, step.DisableTx))
+func (mm *MockMigrator) DoStep(ctx context.Context, step dbump.Step) error {
+	mm.log = append(mm.log, "dostep", fmt.Sprintf(mockDoStepFmt, step.Version, step.Query, step.DisableTx))
 	if mm.DoStepFn == nil {
 		return nil
 	}
 	return mm.DoStepFn(ctx, step)
-}
-
-type MockLoader struct {
-	LoaderFn func() ([]*Migration, error)
-}
-
-func (ml *MockLoader) Load() ([]*Migration, error) {
-	return ml.LoaderFn()
 }

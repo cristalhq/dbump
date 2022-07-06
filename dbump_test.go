@@ -1,4 +1,4 @@
-package dbump
+package dbump_test
 
 import (
 	"context"
@@ -7,247 +7,141 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/cristalhq/dbump"
+	"github.com/cristalhq/dbump/tests"
 )
 
 func TestRunCheck(t *testing.T) {
 	testCases := []struct {
 		testName string
-		cfg      Config
+		cfg      dbump.Config
 	}{
 		{
 			testName: "migrator is nil",
-			cfg:      Config{},
+			cfg:      dbump.Config{},
 		},
 		{
 			testName: "loader is nil",
-			cfg: Config{
-				Migrator: &MockMigrator{},
+			cfg: dbump.Config{
+				Migrator: &tests.MockMigrator{},
 			},
 		},
 		{
 			testName: "mode is ModeNotSet",
-			cfg: Config{
-				Migrator: &MockMigrator{},
-				Loader:   NewSliceLoader(nil),
+			cfg: dbump.Config{
+				Migrator: &tests.MockMigrator{},
+				Loader:   dbump.NewSliceLoader(nil),
 			},
 		},
 		{
 			testName: "bad mode",
-			cfg: Config{
-				Migrator: &MockMigrator{},
-				Loader:   NewSliceLoader(nil),
-				Mode:     modeMaxPossible + 1,
+			cfg: dbump.Config{
+				Migrator: &tests.MockMigrator{},
+				Loader:   dbump.NewSliceLoader(nil),
+				Mode:     1000,
 			},
 		},
 		{
 			testName: "num not set",
-			cfg: Config{
-				Migrator: &MockMigrator{},
-				Loader:   NewSliceLoader(nil),
-				Mode:     ModeApplyN,
+			cfg: dbump.Config{
+				Migrator: &tests.MockMigrator{},
+				Loader:   dbump.NewSliceLoader(nil),
+				Mode:     dbump.ModeApplyN,
 			},
 		},
 		{
 			testName: "num not set",
-			cfg: Config{
-				Migrator: &MockMigrator{},
-				Loader:   NewSliceLoader(nil),
-				Mode:     ModeRevertN,
+			cfg: dbump.Config{
+				Migrator: &tests.MockMigrator{},
+				Loader:   dbump.NewSliceLoader(nil),
+				Mode:     dbump.ModeRevertN,
 			},
 		},
 	}
 
 	for _, tc := range testCases {
-		failIfOk(t, Run(context.Background(), tc.cfg))
+		failIfOk(t, dbump.Run(context.Background(), tc.cfg))
 	}
 }
 
-func TestMigrateApplyAll(t *testing.T) {
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"dostep", "{v:1 q:'SELECT 1;' notx:true}",
-		"dostep", "{v:2 q:'SELECT 2;' notx:true}",
-		"dostep", "{v:3 q:'SELECT 3;' notx:true}",
-		"dostep", "{v:4 q:'SELECT 4;' notx:true}",
-		"dostep", "{v:5 q:'SELECT 5;' notx:true}",
-		"unlockdb",
-	}
-
-	mm := &MockMigrator{}
-	cfg := Config{
-		Migrator:  mm,
-		Loader:    NewSliceLoader(testdataMigrations),
-		Mode:      ModeApplyAll,
-		DisableTx: true, // for shorter wantLog
-	}
-
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+func TestMigrate_ApplyAll(t *testing.T) {
+	suite := tests.NewMigratorSuite(&tests.MockMigrator{})
+	suite.ApplyAll(t)
 }
 
-func TestMigrateUpWhenFull(t *testing.T) {
-	wantLog := []string{
-		"lockdb", "init", "getversion", "unlockdb",
+func TestMigrate_ApplyOne(t *testing.T) {
+	mm := &tests.MockMigrator{
+		VersionFn: func(ctx context.Context) (version int, err error) {
+			return 3, nil
+		},
 	}
+	suite := tests.NewMigratorSuite(mm)
 
-	mm := &MockMigrator{
+	suite.ApplyOne(t)
+}
+
+func TestMigrate_ApplyAllWhenFull(t *testing.T) {
+	mm := &tests.MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
 			return 5, nil
 		},
 	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
-	}
+	suite := tests.NewMigratorSuite(mm)
 
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	suite.ApplyAllWhenFull(t)
 }
 
-func TestMigrateApplyN(t *testing.T) {
-	currVersion := 3
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"dostep", "{v:4 q:'SELECT 4;' notx:false}",
-		"unlockdb",
-	}
-
-	mm := &MockMigrator{
+func TestMigrate_RevertOne(t *testing.T) {
+	mm := &tests.MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
-			return currVersion, nil
+			return 3, nil
 		},
 	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyN,
-		Num:      1,
-	}
+	suite := tests.NewMigratorSuite(mm)
 
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	suite.RevertOne(t)
 }
 
-func TestMigrateRevertAll(t *testing.T) {
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"dostep", "{v:4 q:'SELECT 50;' notx:true}",
-		"dostep", "{v:3 q:'SELECT 40;' notx:true}",
-		"dostep", "{v:2 q:'SELECT 30;' notx:true}",
-		"dostep", "{v:1 q:'SELECT 20;' notx:true}",
-		"dostep", "{v:0 q:'SELECT 10;' notx:true}",
-		"unlockdb",
-	}
-
-	mm := &MockMigrator{
-		VersionFn: func(ctx context.Context) (version int, err error) {
-			return 5, nil
-		},
-	}
-	cfg := Config{
-		Migrator:  mm,
-		Loader:    NewSliceLoader(testdataMigrations),
-		Mode:      ModeRevertAll,
-		DisableTx: true, // for shorter wantLog
-	}
-
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
-}
-
-func TestMigrateRevertAllWhenEmpty(t *testing.T) {
-	wantLog := []string{
-		"lockdb", "init", "getversion", "unlockdb",
-	}
-
-	mm := &MockMigrator{
+func TestMigrate_RevertAllWhenEmpty(t *testing.T) {
+	mm := &tests.MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
 			return 0, nil
 		},
 	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeRevertAll,
-	}
+	suite := tests.NewMigratorSuite(mm)
 
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	suite.RevertAllWhenEmpty(t)
 }
 
-func TestMigrateRevertN(t *testing.T) {
-	currVersion := 3
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"dostep", "{v:2 q:'SELECT 30;' notx:false}",
-		"unlockdb",
-	}
-
-	mm := &MockMigrator{
+func TestMigrate_RevertAll(t *testing.T) {
+	mm := &tests.MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
-			return currVersion, nil
+			return 5, nil
 		},
 	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeRevertN,
-		Num:      1,
-	}
-
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	suite := tests.NewMigratorSuite(mm)
+	suite.RevertAll(t)
 }
 
-func TestMigrateRedo(t *testing.T) {
-	currVersion := 3
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"dostep", "{v:2 q:'SELECT 30;' notx:false}",
-		"dostep", "{v:3 q:'SELECT 3;' notx:false}",
-		"unlockdb",
-	}
-
-	mm := &MockMigrator{
+func TestMigrate_Redo(t *testing.T) {
+	mm := &tests.MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
-			return currVersion, nil
+			return 3, nil
 		},
 	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeRedo,
-	}
-
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	suite := tests.NewMigratorSuite(mm)
+	suite.Redo(t)
 }
 
-func TestMigrateDrop(t *testing.T) {
-	currVersion := 3
-	wantLog := []string{
-		"lockdb", "init", "getversion",
-		"dostep", "{v:2 q:'SELECT 30;' notx:false}",
-		"dostep", "{v:1 q:'SELECT 20;' notx:false}",
-		"dostep", "{v:0 q:'SELECT 10;' notx:false}",
-		"drop",
-		"unlockdb",
-	}
-
-	mm := &MockMigrator{
+func TestMigrate_Drop(t *testing.T) {
+	mm := &tests.MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
-			return currVersion, nil
+			return 5, nil
 		},
 	}
-	cfg := Config{
-		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeDrop,
-	}
-
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	suite := tests.NewMigratorSuite(mm)
+	suite.Drop(t)
 }
 
 func TestBeforeAfterStep(t *testing.T) {
@@ -263,25 +157,25 @@ func TestBeforeAfterStep(t *testing.T) {
 		"unlockdb",
 	}
 
-	mm := &MockMigrator{
+	mm := &tests.MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
 			return currVersion, nil
 		},
 	}
-	cfg := Config{
+	cfg := dbump.Config{
 		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
-		BeforeStep: func(ctx context.Context, step Step) {
-			mm.log = append(mm.log, "before", fmt.Sprintf("{v:%d q:'%s' notx:%v}", step.Version, step.Query, step.DisableTx))
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
+		BeforeStep: func(ctx context.Context, step dbump.Step) {
+			mm.LogAdd("before", fmt.Sprintf("{v:%d q:'%s' notx:%v}", step.Version, step.Query, step.DisableTx))
 		},
-		AfterStep: func(ctx context.Context, step Step) {
-			mm.log = append(mm.log, "after", fmt.Sprintf("{v:%d q:'%s' notx:%v}", step.Version, step.Query, step.DisableTx))
+		AfterStep: func(ctx context.Context, step dbump.Step) {
+			mm.LogAdd("after", fmt.Sprintf("{v:%d q:'%s' notx:%v}", step.Version, step.Query, step.DisableTx))
 		},
 	}
 
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfErr(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestTimeout(t *testing.T) {
@@ -291,8 +185,8 @@ func TestTimeout(t *testing.T) {
 		"unlockdb",
 	}
 
-	mm := &MockMigrator{
-		DoStepFn: func(ctx context.Context, step Step) error {
+	mm := &tests.MockMigrator{
+		DoStepFn: func(ctx context.Context, step dbump.Step) error {
 			select {
 			case <-time.After(30 * time.Second):
 				return nil
@@ -301,15 +195,34 @@ func TestTimeout(t *testing.T) {
 			}
 		},
 	}
-	cfg := Config{
+	cfg := dbump.Config{
 		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
 		Timeout:  20 * time.Millisecond,
 	}
 
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfOk(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
+}
+
+func TestDisableTx(t *testing.T) {
+	wantLog := []string{
+		"lockdb", "init", "getversion",
+		"dostep", "{v:1 q:'SELECT 1;' notx:true}",
+		"unlockdb",
+	}
+
+	mm := &tests.MockMigrator{}
+	cfg := dbump.Config{
+		Migrator:  mm,
+		Loader:    dbump.NewSliceLoader(testdataMigrations[:1]),
+		Mode:      dbump.ModeApplyAll,
+		DisableTx: true,
+	}
+
+	failIfErr(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestLockless(t *testing.T) {
@@ -323,29 +236,29 @@ func TestLockless(t *testing.T) {
 		"dostep", "{v:5 q:'SELECT 5;' notx:false}",
 	}
 
-	mm := &MockMigrator{}
-	cfg := Config{
-		Migrator: AsLocklessMigrator(mm),
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
+	mm := &tests.MockMigrator{}
+	cfg := dbump.Config{
+		Migrator: dbump.AsLocklessMigrator(mm),
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
 	}
 
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfErr(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestUseForce(t *testing.T) {
 	currVersion := 3
 	wantLog := []string{
 		"lockdb", "unlockdb", "lockdb", "init", "getversion",
-		"dostep", "{v:4 q:'SELECT 4;' notx:true}",
-		"dostep", "{v:5 q:'SELECT 5;' notx:true}",
+		"dostep", "{v:4 q:'SELECT 4;' notx:false}",
+		"dostep", "{v:5 q:'SELECT 5;' notx:false}",
 		"unlockdb",
 	}
 
 	isLocked := true
 
-	mm := &MockMigrator{
+	mm := &tests.MockMigrator{
 		LockDBFn: func(ctx context.Context) error {
 			if isLocked {
 				return errors.New("cannot get lock")
@@ -360,88 +273,86 @@ func TestUseForce(t *testing.T) {
 			return currVersion, nil
 		},
 	}
-	cfg := Config{
-		Migrator:  mm,
-		Loader:    NewSliceLoader(testdataMigrations),
-		Mode:      ModeApplyAll,
-		UseForce:  true,
-		DisableTx: true, // for shorter wantLog
+	cfg := dbump.Config{
+		Migrator: mm,
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
+		UseForce: true,
 	}
 
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfErr(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestZigZag(t *testing.T) {
 	wantLog := []string{
 		"lockdb", "init", "getversion",
-		"dostep", "{v:1 q:'SELECT 1;' notx:true}",
-		"dostep", "{v:0 q:'SELECT 10;' notx:true}",
-		"dostep", "{v:1 q:'SELECT 1;' notx:true}",
+		"dostep", "{v:1 q:'SELECT 1;' notx:false}",
+		"dostep", "{v:0 q:'SELECT 10;' notx:false}",
+		"dostep", "{v:1 q:'SELECT 1;' notx:false}",
 
-		"dostep", "{v:2 q:'SELECT 2;' notx:true}",
-		"dostep", "{v:1 q:'SELECT 20;' notx:true}",
-		"dostep", "{v:2 q:'SELECT 2;' notx:true}",
+		"dostep", "{v:2 q:'SELECT 2;' notx:false}",
+		"dostep", "{v:1 q:'SELECT 20;' notx:false}",
+		"dostep", "{v:2 q:'SELECT 2;' notx:false}",
 
-		"dostep", "{v:3 q:'SELECT 3;' notx:true}",
-		"dostep", "{v:2 q:'SELECT 30;' notx:true}",
-		"dostep", "{v:3 q:'SELECT 3;' notx:true}",
+		"dostep", "{v:3 q:'SELECT 3;' notx:false}",
+		"dostep", "{v:2 q:'SELECT 30;' notx:false}",
+		"dostep", "{v:3 q:'SELECT 3;' notx:false}",
 
-		"dostep", "{v:4 q:'SELECT 4;' notx:true}",
-		"dostep", "{v:3 q:'SELECT 40;' notx:true}",
-		"dostep", "{v:4 q:'SELECT 4;' notx:true}",
+		"dostep", "{v:4 q:'SELECT 4;' notx:false}",
+		"dostep", "{v:3 q:'SELECT 40;' notx:false}",
+		"dostep", "{v:4 q:'SELECT 4;' notx:false}",
 
-		"dostep", "{v:5 q:'SELECT 5;' notx:true}",
-		"dostep", "{v:4 q:'SELECT 50;' notx:true}",
-		"dostep", "{v:5 q:'SELECT 5;' notx:true}",
+		"dostep", "{v:5 q:'SELECT 5;' notx:false}",
+		"dostep", "{v:4 q:'SELECT 50;' notx:false}",
+		"dostep", "{v:5 q:'SELECT 5;' notx:false}",
 		"unlockdb",
 	}
 
-	mm := &MockMigrator{}
-	cfg := Config{
-		Migrator:  mm,
-		Loader:    NewSliceLoader(testdataMigrations),
-		Mode:      ModeApplyAll,
-		DisableTx: true, // for shorter wantLog
-		ZigZag:    true,
+	mm := &tests.MockMigrator{}
+	cfg := dbump.Config{
+		Migrator: mm,
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
+		ZigZag:   true,
 	}
 
-	failIfErr(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfErr(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestFailOnInitError(t *testing.T) {
 	wantLog := []string{"lockdb", "init", "unlockdb"}
-	mm := &MockMigrator{
+	mm := &tests.MockMigrator{
 		InitFn: func(ctx context.Context) error {
 			return errors.New("no access")
 		},
 	}
-	cfg := Config{
+	cfg := dbump.Config{
 		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
 	}
 
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfOk(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestFailOnLockDB(t *testing.T) {
 	wantLog := []string{"lockdb"}
-	mm := &MockMigrator{
+	mm := &tests.MockMigrator{
 		LockDBFn: func(ctx context.Context) (err error) {
 			return errors.New("no access")
 		},
 	}
-	cfg := Config{
+	cfg := dbump.Config{
 		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
 	}
 
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfOk(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestFailOnUnlockDB(t *testing.T) {
@@ -451,7 +362,7 @@ func TestFailOnUnlockDB(t *testing.T) {
 		"dostep", "{v:5 q:'SELECT 5;' notx:false}",
 		"unlockdb",
 	}
-	mm := &MockMigrator{
+	mm := &tests.MockMigrator{
 		UnlockDBFn: func(ctx context.Context) (err error) {
 			return errors.New("no access")
 		},
@@ -459,33 +370,33 @@ func TestFailOnUnlockDB(t *testing.T) {
 			return currVersion, nil
 		},
 	}
-	cfg := Config{
+	cfg := dbump.Config{
 		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
 	}
 
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfOk(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestFailOnGetVersionError(t *testing.T) {
 	wantLog := []string{
 		"lockdb", "init", "getversion", "unlockdb",
 	}
-	mm := &MockMigrator{
+	mm := &tests.MockMigrator{
 		VersionFn: func(ctx context.Context) (version int, err error) {
 			return 0, errors.New("no access")
 		},
 	}
-	cfg := Config{
+	cfg := dbump.Config{
 		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
 	}
 
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfOk(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestFailOnDoStepError(t *testing.T) {
@@ -494,88 +405,89 @@ func TestFailOnDoStepError(t *testing.T) {
 		"dostep", "{v:1 q:'SELECT 1;' notx:false}",
 		"unlockdb",
 	}
-	mm := &MockMigrator{
-		DoStepFn: func(ctx context.Context, step Step) error {
+	mm := &tests.MockMigrator{
+		DoStepFn: func(ctx context.Context, step dbump.Step) error {
 			return errors.New("no access")
 		},
 	}
-	cfg := Config{
+	cfg := dbump.Config{
 		Migrator: mm,
-		Loader:   NewSliceLoader(testdataMigrations),
-		Mode:     ModeApplyAll,
+		Loader:   dbump.NewSliceLoader(testdataMigrations),
+		Mode:     dbump.ModeApplyAll,
 	}
 
-	failIfOk(t, Run(context.Background(), cfg))
-	mustEqual(t, mm.log, wantLog)
+	failIfOk(t, dbump.Run(context.Background(), cfg))
+	mustEqual(t, mm.Log(), wantLog)
 }
 
 func TestFailOnLoad(t *testing.T) {
-	cfg := Config{
-		Migrator: &MockMigrator{},
+	cfg := dbump.Config{
+		Migrator: &tests.MockMigrator{},
 		Loader: &MockLoader{
-			LoaderFn: func() ([]*Migration, error) {
+			LoaderFn: func() ([]*dbump.Migration, error) {
 				return nil, errors.New("forgot to commit")
 			},
 		},
-		Mode: ModeApplyAll,
+		Mode: dbump.ModeApplyAll,
 	}
-	failIfOk(t, Run(context.Background(), cfg))
+	failIfOk(t, dbump.Run(context.Background(), cfg))
 }
 
-func Test_loadMigrations(t *testing.T) {
+func TestLoad(t *testing.T) {
 	testCases := []struct {
-		testName       string
-		migrations     []*Migration
-		wantMigrations []*Migration
-		wantErr        error
+		testName   string
+		migrations []*dbump.Migration
+		wantErr    error
 	}{
 		{
-			"ok (migrations are sorted)",
-			[]*Migration{
-				{ID: 2},
-				{ID: 1},
-			},
-			[]*Migration{
-				{ID: 1},
-				{ID: 2},
-			},
-			nil,
-		},
-
-		{
 			"fail (missing migration)",
-			[]*Migration{
+			[]*dbump.Migration{
 				{ID: 3},
 				{ID: 1},
 			},
-			nil,
-			errors.New("missing migration number: 2 (have 3)"),
+			errors.New("load: missing migration number: 2 (have 3)"),
 		},
 
 		{
 			"fail (duplicate id)",
-			[]*Migration{
+			[]*dbump.Migration{
 				{ID: 2, Name: "mig2"},
 				{ID: 2, Name: "mig2fix"},
 				{ID: 1},
 			},
-			nil,
-			errors.New("duplicate migration number: 2 (mig2)"),
+			errors.New("load: duplicate migration number: 2 (mig2fix)"),
 		},
 	}
 
 	for _, tc := range testCases {
-		m := mig{
-			Loader: NewSliceLoader(tc.migrations),
+		cfg := dbump.Config{
+			Migrator: tests.NewMockMigrator(nil),
+			Loader:   dbump.NewSliceLoader(tc.migrations),
+			Mode:     dbump.ModeApplyAll,
 		}
 
-		migs, err := m.load()
-		mustEqual(t, err != nil, tc.wantErr != nil)
-		mustEqual(t, migs, tc.wantMigrations)
+		err := dbump.Run(context.Background(), cfg)
+
+		switch {
+		case (err != nil) && (tc.wantErr != nil):
+			mustEqual(t, err.Error(), tc.wantErr.Error())
+		case err != nil:
+			failIfErr(t, err)
+		default:
+			t.Fatal("want error")
+		}
 	}
 }
 
-var testdataMigrations = []*Migration{
+type MockLoader struct {
+	LoaderFn func() ([]*dbump.Migration, error)
+}
+
+func (ml *MockLoader) Load() ([]*dbump.Migration, error) {
+	return ml.LoaderFn()
+}
+
+var testdataMigrations = []*dbump.Migration{
 	{
 		ID:     1,
 		Name:   `0001_init.sql`,
