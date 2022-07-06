@@ -25,7 +25,7 @@ type Config struct {
 	// Table for the dbump version table. Default is empty which means "_dbump_log" table.
 	Table string
 
-	// [schema].table
+	// [schema.]table
 	tableName string
 	// to prevent multiple migrations running at the same time
 	lockNum int64
@@ -33,14 +33,14 @@ type Config struct {
 
 // NewMigrator instantiates new Migrator.
 func NewMigrator(conn *pgx.Conn, cfg Config) *Migrator {
-	if cfg.Schema != "" {
-		cfg.tableName += cfg.Schema + "."
+	if cfg.Schema == "" {
+		cfg.Schema = "public"
 	}
 	if cfg.Table == "" {
 		cfg.Table = "_dbump_log"
 	}
 
-	cfg.tableName += cfg.Table
+	cfg.tableName = cfg.Schema + "." + cfg.Table
 	cfg.lockNum = hashTableName(cfg.tableName)
 
 	return &Migrator{
@@ -51,11 +51,16 @@ func NewMigrator(conn *pgx.Conn, cfg Config) *Migrator {
 
 // Init is a method from Migrator interface.
 func (pg *Migrator) Init(ctx context.Context) error {
-	query := fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %s;
-CREATE TABLE IF NOT EXISTS %s (
+	var query string
+	if pg.cfg.Schema != "" {
+		query = fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %s;`, pg.cfg.Schema)
+	}
+
+	query += fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 	version    BIGINT NOT NULL,
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL
-);`, pg.cfg.Schema, pg.cfg.tableName)
+);`, pg.cfg.tableName)
+
 	_, err := pg.conn.Exec(ctx, query)
 	return err
 }
@@ -63,6 +68,11 @@ CREATE TABLE IF NOT EXISTS %s (
 // Drop is a method from Migrator interface.
 func (pg *Migrator) Drop(ctx context.Context) error {
 	query := fmt.Sprintf(`DROP TABLE IF EXISTS %s;`, pg.cfg.tableName)
+
+	// TODO: probably should ignore error for this query
+	// if pg.cfg.Schema != "" {
+	// 	query = fmt.Sprintf(`DROP SCHEMA IF EXISTS %s RESTRICT;`, pg.cfg.Schema)
+	// }
 	_, err := pg.conn.Exec(ctx, query)
 	return err
 }
