@@ -238,9 +238,10 @@ func TestLockless(t *testing.T) {
 
 	mm := &tests.MockMigrator{}
 	cfg := dbump.Config{
-		Migrator: dbump.AsLocklessMigrator(mm),
-		Loader:   dbump.NewSliceLoader(testdataMigrations),
-		Mode:     dbump.ModeApplyAll,
+		Migrator:       mm,
+		Loader:         dbump.NewSliceLoader(testdataMigrations),
+		Mode:           dbump.ModeApplyAll,
+		NoDatabaseLock: true,
 	}
 
 	failIfErr(t, dbump.Run(context.Background(), cfg))

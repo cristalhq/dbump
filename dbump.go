@@ -38,6 +38,10 @@ type Config struct {
 	// Only Migrator.DoStep method will be bounded with this timeout.
 	Timeout time.Duration
 
+	// NoDatabaseLock set to true will run migrations without taking a database lock.
+	// Default is false.
+	NoDatabaseLock bool
+
 	// DisableTx will run every migration not in a transaction.
 	// This completely depends on a specific Migrator implementation
 	// because not every database supports transaction, so this option can be no-op all the time.
@@ -118,11 +122,6 @@ const (
 	modeMaxPossible
 )
 
-// AsLocklessMigrator makes given migrator to not take a lock on database.
-func AsLocklessMigrator(m Migrator) Migrator {
-	return &locklessMigrator{m}
-}
-
 // Run the Migrator with migration queries provided by the Loader.
 func Run(ctx context.Context, config Config) error {
 	switch {
@@ -191,20 +190,12 @@ func (m *mig) load() ([]*Migration, error) {
 }
 
 func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
-	if err := m.LockDB(ctx); err != nil {
-		if !m.UseForce {
-			return fmt.Errorf("lock db: %w", err)
-		}
-		if err := m.UnlockDB(ctx); err != nil {
-			return fmt.Errorf("force unlock db: %w", err)
-		}
-		if err := m.LockDB(ctx); err != nil {
-			return fmt.Errorf("force lock db: %w", err)
-		}
+	if err := m.lockDB(ctx); err != nil {
+		return err
 	}
 
 	defer func() {
-		if errUnlock := m.UnlockDB(ctx); err == nil && errUnlock != nil {
+		if errUnlock := m.unlockDB(ctx); err == nil && errUnlock != nil {
 			err = fmt.Errorf("unlock db: %w", errUnlock)
 		}
 	}()
@@ -219,6 +210,32 @@ func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
 		err = m.Drop(ctx)
 	}
 	return err
+}
+
+func (m *mig) lockDB(ctx context.Context) error {
+	if m.Config.NoDatabaseLock {
+		return nil
+	}
+
+	if err := m.LockDB(ctx); err != nil {
+		if !m.UseForce {
+			return fmt.Errorf("lock db: %w", err)
+		}
+		if err := m.UnlockDB(ctx); err != nil {
+			return fmt.Errorf("force unlock db: %w", err)
+		}
+		if err := m.LockDB(ctx); err != nil {
+			return fmt.Errorf("force lock db: %w", err)
+		}
+	}
+	return nil
+}
+
+func (m *mig) unlockDB(ctx context.Context) error {
+	if m.Config.NoDatabaseLock {
+		return nil
+	}
+	return m.UnlockDB(ctx)
 }
 
 func (m *mig) runMigrationsLocked(ctx context.Context, ms []*Migration) error {
@@ -342,22 +359,4 @@ func (m *Migration) toStep(up, disableTx bool) Step {
 		Query:     m.Revert,
 		DisableTx: disableTx,
 	}
-}
-
-type locklessMigrator struct {
-	m Migrator
-}
-
-func (llm *locklessMigrator) LockDB(ctx context.Context) error   { return nil }
-func (llm *locklessMigrator) UnlockDB(ctx context.Context) error { return nil }
-
-func (llm *locklessMigrator) Init(ctx context.Context) error { return llm.m.Init(ctx) }
-func (llm *locklessMigrator) Drop(ctx context.Context) error { return llm.m.Drop(ctx) }
-
-func (llm *locklessMigrator) Version(ctx context.Context) (version int, err error) {
-	return llm.m.Version(ctx)
-}
-
-func (llm *locklessMigrator) DoStep(ctx context.Context, step Step) error {
-	return llm.m.DoStep(ctx, step)
 }

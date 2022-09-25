@@ -50,20 +50,20 @@ Credits goes to [Postgres.ai](https://postgres.ai/) mentioning this feature at c
 
 ## Do not take database locks
 
-If for some reason you don't want or you can't take lock on database (why???) there is `AsLocklessMigrator` function to achieve this:
+If for some reason you don't want or you can't take lock on database there is `Config.NoDatabaseLock` field to achieve this:
 
 ```go
 // let's take Postgres for example 
 m := dbump_pg.NewMigrator(...)
 
-// volia, now m is a migrator that will not take a lock
-m = dbump.AsLocklessMigrator(m)
+cfg := dbump.Config{
+	NoDatabaseLock: true,
+	// set other fields
+}
 
-// pass m in config param as before
-dbump.Run(...)
+dbump.Run(context.Background(), cfg)
 ```
 
 However, lock prevents from running few migrators at once, possible creating bad situations that's is hard to fix.
 
-Also, not all migrators supports locks.
-
+Also, not all migrators support locks.
