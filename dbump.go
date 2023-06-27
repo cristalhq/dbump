@@ -191,7 +191,7 @@ func (m *mig) load() ([]*Migration, error) {
 
 func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
 	if err := m.lockDB(ctx); err != nil {
-		return err
+		return fmt.Errorf("lock db: %w", err)
 	}
 
 	defer func() {
@@ -241,14 +241,14 @@ func (m *mig) unlockDB(ctx context.Context) error {
 func (m *mig) runMigrationsLocked(ctx context.Context, ms []*Migration) error {
 	curr, target, err := m.getCurrAndTargetVersions(ctx, len(ms))
 	if err != nil {
-		return err
+		return fmt.Errorf("version get: %w", err)
 	}
 
-	for _, step := range m.prepareSteps(curr, target, ms) {
+	for i, step := range m.prepareSteps(curr, target, ms) {
 		m.BeforeStep(ctx, step)
 
 		if err := m.step(ctx, step); err != nil {
-			return err
+			return fmt.Errorf("migration %d: %w", i, err)
 		}
 
 		m.AfterStep(ctx, step)
