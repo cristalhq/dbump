@@ -7,7 +7,7 @@ import (
 	"hash/fnv"
 
 	"github.com/cristalhq/dbump"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 )
 
 var _ dbump.Migrator = &Migrator{}
@@ -111,7 +111,7 @@ func (pg *Migrator) DoStep(ctx context.Context, step dbump.Step) error {
 		return err
 	}
 
-	return pg.conn.BeginFunc(ctx, func(tx pgx.Tx) error {
+	return pgx.BeginFunc(ctx, pg.conn, func(tx pgx.Tx) error {
 		if _, err := tx.Exec(ctx, step.Query); err != nil {
 			return err
 		}
