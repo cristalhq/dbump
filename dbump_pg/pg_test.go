@@ -1,85 +1,132 @@
-package dbump_pg_test
+package dbump_pg
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"os"
+	"reflect"
 	"testing"
 
-	"github.com/cristalhq/dbump"
-	"github.com/cristalhq/dbump/dbump_pg"
-
+	"github.com/cristalhq/dbump/tests"
 	_ "github.com/lib/pq"
 )
 
 var sqldb *sql.DB
 
 func init() {
-	var (
-		host     = os.Getenv("DBUMP_PG_HOST")
-		port     = os.Getenv("DBUMP_PG_PORT")
-		username = os.Getenv("DBUMP_PG_USER")
-		password = os.Getenv("DBUMP_PG_PASS")
-		db       = os.Getenv("DBUMP_PG_DB")
-		sslmode  = os.Getenv("DBUMP_PG_SSL")
-	)
+	host := envOrDef("DBUMP_PG_HOST", "localhost")
+	port := envOrDef("DBUMP_PG_PORT", "5432")
+	username := envOrDef("DBUMP_PG_USER", "postgres")
+	password := envOrDef("DBUMP_PG_PASS", "postgres")
+	db := envOrDef("DBUMP_PG_DB", "postgres")
+	sslmode := envOrDef("DBUMP_PG_SSL", "disable")
 
-	if host == "" {
-		host = "localhost"
-	}
-	if port == "" {
-		port = "5432"
-	}
-	if username == "" {
-		username = "postgres"
-	}
-	if password == "" {
-		password = "postgres"
-	}
-	if db == "" {
-		db = "postgres"
-	}
-	if sslmode == "" {
-		sslmode = "disable"
-	}
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, username, password, db, sslmode)
 
 	var err error
 	sqldb, err = sql.Open("postgres", dsn)
 	if err != nil {
-		panic(err)
+		panic(fmt.Sprintf("dbump_pgx: cannot connect to container: %s", err))
 	}
 }
 
-func TestPG_Simple(t *testing.T) {
-	m := dbump_pg.NewMigrator(sqldb)
-	l := dbump.NewSliceLoader([]*dbump.Migration{
+func TestNonDefaultSchemaTable(t *testing.T) {
+	testCases := []struct {
+		name          string
+		schema        string
+		table         string
+		wantTableName string
+		wantLockNum   int64
+	}{
 		{
-			ID:       1,
-			Apply:    "SELECT 1;",
-			Rollback: "SELECT 1;",
+			name:          "all empty",
+			schema:        "",
+			table:         "",
+			wantTableName: "public._dbump_log",
+			wantLockNum:   1542931740578198266,
 		},
 		{
-			ID:       2,
-			Apply:    "SELECT 1;",
-			Rollback: "SELECT 1;",
+			name:          "schema set",
+			schema:        "test_schema",
+			table:         "",
+			wantTableName: "test_schema._dbump_log",
+			wantLockNum:   1417388815471108263,
 		},
 		{
-			ID:       3,
-			Apply:    "SELECT 1;",
-			Rollback: "SELECT 1;",
+			name:          "table set",
+			schema:        "",
+			table:         "test_table",
+			wantTableName: "public.test_table",
+			wantLockNum:   8592189678091584965,
 		},
-	})
+		{
+			name:          "schema and table set",
+			schema:        "test_schema",
+			table:         "test_table",
+			wantTableName: "test_schema.test_table",
+			wantLockNum:   4631047095544292572,
+		},
+	}
 
-	errRun := dbump.Run(context.Background(), m, l)
-	failIfErr(t, errRun)
+	for _, tc := range testCases {
+		m := NewMigrator(sqldb, Config{
+			Schema: tc.schema,
+			Table:  tc.table,
+		})
+		mustEqual(t, m.cfg.tableName, tc.wantTableName)
+		mustEqual(t, m.cfg.lockNum, tc.wantLockNum)
+	}
 }
 
-func failIfErr(tb testing.TB, err error) {
+func TestMigrate_ApplyAll(t *testing.T) {
+	newSuite().ApplyAll(t)
+}
+
+func TestMigrate_ApplyOne(t *testing.T) {
+	newSuite().ApplyOne(t)
+}
+
+func TestMigrate_ApplyAllWhenFull(t *testing.T) {
+	newSuite().ApplyAllWhenFull(t)
+}
+
+func TestMigrate_RevertOne(t *testing.T) {
+	newSuite().RevertOne(t)
+}
+
+func TestMigrate_RevertAllWhenEmpty(t *testing.T) {
+	newSuite().RevertAllWhenEmpty(t)
+}
+
+func TestMigrate_RevertAll(t *testing.T) {
+	newSuite().RevertAll(t)
+}
+
+func TestMigrate_Redo(t *testing.T) {
+	newSuite().Redo(t)
+}
+
+func newSuite() *tests.MigratorSuite {
+	m := NewMigrator(sqldb, Config{})
+	suite := tests.NewMigratorSuite(m)
+	suite.ApplyTmpl = "CREATE TABLE public.%[1]s_%[2]d (id INT);"
+	suite.RevertTmpl = "DROP TABLE public.%[1]s_%[2]d;"
+	suite.CleanMigTmpl = "DROP TABLE IF EXISTS public.%[1]s_%[2]d;"
+	suite.CleanTest = "TRUNCATE TABLE _dbump_log;"
+	return suite
+}
+
+func mustEqual(tb testing.TB, got, want interface{}) {
 	tb.Helper()
-	if err != nil {
-		tb.Fatal(err)
+	if !reflect.DeepEqual(got, want) {
+		tb.Fatalf("\nhave %+v\nwant %+v", got, want)
 	}
+}
+
+func envOrDef(env, def string) string {
+	if val := os.Getenv(env); val != "" {
+		return val
+	}
+	return def
 }
