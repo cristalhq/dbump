@@ -63,6 +63,8 @@ type Config struct {
 	// AfterStep function will be invoked right after the DoStep for each step.
 	// Default is nil and means no-op.
 	AfterStep func(ctx context.Context, step Step)
+
+	_ struct{} // enforce explicit field names.
 }
 
 // Migrator represents database over which we will run migrations.
