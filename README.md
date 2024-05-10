@@ -2,8 +2,6 @@
 
 [![build-img]][build-url]
 [![pkg-img]][pkg-url]
-[![reportcard-img]][reportcard-url]
-[![coverage-img]][coverage-url]
 [![version-img]][version-url]
 
 Go database schema migrator library (See [cristalhq/dbumper](https://github.com/cristalhq/dbumper) tool).
@@ -29,7 +27,7 @@ See [GUIDE.md](https://github.com/cristalhq/dbump/blob/main/GUIDE.md) for more d
 
 ## Install
 
-Go version 1.16+
+Go version 1.17+
 
 ```
 go get github.com/cristalhq/dbump
@@ -66,9 +64,5 @@ See [these docs][pkg-url].
 [build-url]: https://github.com/cristalhq/dbump/actions
 [pkg-img]: https://pkg.go.dev/badge/cristalhq/dbump
 [pkg-url]: https://pkg.go.dev/github.com/cristalhq/dbump
-[reportcard-img]: https://goreportcard.com/badge/cristalhq/dbump
-[reportcard-url]: https://goreportcard.com/report/cristalhq/dbump
-[coverage-img]: https://codecov.io/gh/cristalhq/dbump/branch/main/graph/badge.svg
-[coverage-url]: https://codecov.io/gh/cristalhq/dbump
 [version-img]: https://img.shields.io/github/v/release/cristalhq/dbump
 [version-url]: https://github.com/cristalhq/dbump/releases

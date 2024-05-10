@@ -14,10 +14,10 @@ import (
 var ErrMigrationAlreadyLocked = errors.New("migration is locked already")
 
 // MigrationDelimiter separates apply and revert queries inside a migration step/file.
-// Is exported just to be used by https://github.com/cristalhq/dbumper
+// Const is exported to be used by https://github.com/cristalhq/dbumper tool.
 const MigrationDelimiter = `--- apply above / revert below ---`
 
-// Config for the migration process. Is used only by Run function.
+// Config of the migration process. Used by Run function.
 type Config struct {
 	// Migrator represents a database.
 	Migrator Migrator
@@ -44,7 +44,7 @@ type Config struct {
 
 	// DisableTx will run every migration not in a transaction.
 	// This completely depends on a specific Migrator implementation
-	// because not every database supports transaction, so this option can be no-op all the time.
+	// because not every database supports transaction, so this option can be no-op for some databases.
 	DisableTx bool
 
 	// UseForce to get a lock on a database. MUST be used with the caution.
@@ -60,6 +60,7 @@ type Config struct {
 	// BeforeStep function will be invoked right before the DoStep for each step.
 	// Default is nil and means no-op.
 	BeforeStep func(ctx context.Context, step Step)
+
 	// AfterStep function will be invoked right after the DoStep for each step.
 	// Default is nil and means no-op.
 	AfterStep func(ctx context.Context, step Step)
@@ -74,7 +75,7 @@ type Migrator interface {
 	// UnlockDB to allow running other migrators later.
 	UnlockDB(ctx context.Context) error
 
-	// Init the dbump database where database state is saved.
+	// Init the dbump table where database state is saved.
 	// What is created by this method completely depends on migrator implementation
 	// and might be different between databases.
 	Init(ctx context.Context) error
@@ -105,9 +106,9 @@ type Loader interface {
 // Migration represents migration step that will be runned on a database.
 type Migration struct {
 	ID     int    // ID of the migration, unique, positive, starts from 1.
-	Name   string // Name of the migration
-	Apply  string // Apply query
-	Revert string // Revert query
+	Name   string // Name of the migration.
+	Apply  string // Apply query.
+	Revert string // Revert query.
 }
 
 // MigratorMode to change migration flow.
@@ -133,17 +134,17 @@ func Run(ctx context.Context, config Config) error {
 		return errors.New("loader cannot be nil")
 	case config.Mode == ModeNotSet:
 		return errors.New("mode not set")
-	case config.Mode >= modeMaxPossible:
+	case config.Mode < 0 || config.Mode >= modeMaxPossible:
 		return fmt.Errorf("incorrect mode provided: %d", config.Mode)
 	case config.Num <= 0 && (config.Mode == ModeApplyN || config.Mode == ModeRevertN):
 		return fmt.Errorf("num must be greater than 0: %d", config.Num)
 	}
 
 	if config.BeforeStep == nil {
-		config.BeforeStep = func(ctx context.Context, step Step) {}
+		config.BeforeStep = noopHook
 	}
 	if config.AfterStep == nil {
-		config.AfterStep = func(ctx context.Context, step Step) {}
+		config.AfterStep = noopHook
 	}
 
 	m := mig{
@@ -197,7 +198,8 @@ func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
 	}
 
 	defer func() {
-		if errUnlock := m.unlockDB(ctx); err == nil && errUnlock != nil {
+		errUnlock := m.unlockDB(ctx)
+		if err == nil && errUnlock != nil {
 			err = fmt.Errorf("unlock db: %w", errUnlock)
 		}
 	}()
@@ -208,6 +210,7 @@ func (m *mig) runMigrations(ctx context.Context, ms []*Migration) (err error) {
 	}
 	err = m.runMigrationsLocked(ctx, ms)
 
+	// drop all dbump data.
 	if m.Mode == ModeDrop {
 		err = m.Drop(ctx)
 	}
@@ -246,11 +249,12 @@ func (m *mig) runMigrationsLocked(ctx context.Context, ms []*Migration) error {
 		return fmt.Errorf("version get: %w", err)
 	}
 
-	for i, step := range m.prepareSteps(curr, target, ms) {
+	steps := m.prepareSteps(curr, target, ms)
+	for i, step := range steps {
 		m.BeforeStep(ctx, step)
 
 		if err := m.step(ctx, step); err != nil {
-			return fmt.Errorf("migration %d: %w", i, err)
+			return fmt.Errorf("migration %d: %w\n%s", i, err, step.Query)
 		}
 
 		m.AfterStep(ctx, step)
@@ -267,6 +271,7 @@ func (m *mig) step(ctx context.Context, step Step) error {
 	return m.DoStep(ctx, step)
 }
 
+// getCurrAndTargetVersions returns current version of the schema and the target version based on run config.
 func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (curr, target int, err error) {
 	curr, err = m.Version(ctx)
 	if err != nil {
@@ -315,6 +320,7 @@ func (m *mig) getCurrAndTargetVersions(ctx context.Context, migrations int) (cur
 
 func (m *mig) prepareSteps(curr, target int, ms []*Migration) []Step {
 	if m.Mode == ModeRedo {
+		// undo & do current step.
 		return []Step{
 			ms[curr-1].toStep(false, m.DisableTx),
 			ms[curr-1].toStep(true, m.DisableTx),
@@ -362,3 +368,5 @@ func (m *Migration) toStep(up, disableTx bool) Step {
 		DisableTx: disableTx,
 	}
 }
+
+func noopHook(context.Context, Step) {}
