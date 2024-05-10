@@ -14,12 +14,14 @@ import (
 var conn *pgx.Conn
 
 func init() {
-	host := envOrDef("DBUMP_PG_HOST", "localhost")
-	port := envOrDef("DBUMP_PG_PORT", "5432")
-	username := envOrDef("DBUMP_PG_USER", "postgres")
-	password := envOrDef("DBUMP_PG_PASS", "postgres")
-	db := envOrDef("DBUMP_PG_DB", "postgres")
-	sslmode := envOrDef("DBUMP_PG_SSL", "disable")
+	var (
+		host     = envOrDef("DBUMP_PG_HOST", "localhost")
+		port     = envOrDef("DBUMP_PG_PORT", "5432")
+		username = envOrDef("DBUMP_PG_USER", "postgres")
+		password = envOrDef("DBUMP_PG_PASS", "postgres")
+		db       = envOrDef("DBUMP_PG_DB", "postgres")
+		sslmode  = envOrDef("DBUMP_PG_SSL", "disable")
+	)
 
 	dsn := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=%s",
 		host, port, username, password, db, sslmode)

@@ -20,15 +20,19 @@ type Migrator struct {
 
 // Config for the migrator.
 type Config struct {
-	// Schema for the dbump version table. Default is empty which means "public" schema.
+	// Schema for the dbump version table.
+	// Default is empty which means "public" schema.
 	Schema string
-	// Table for the dbump version table. Default is empty which means "_dbump_log" table.
+	// Table for the dbump version table.
+	// Default is empty which means "_dbump_log" table.
 	Table string
 
 	// [schema.]table
 	tableName string
 	// to prevent multiple migrations running at the same time
 	lockNum int64
+
+	_ struct{} // enforce explicit field names.
 }
 
 // NewMigrator instantiates new Migrator.
@@ -49,7 +53,7 @@ func NewMigrator(conn *pgx.Conn, cfg Config) *Migrator {
 	}
 }
 
-// Init is a method from Migrator interface.
+// Init is a method from [dbump.Migrator] interface.
 func (pg *Migrator) Init(ctx context.Context) error {
 	var query string
 	if pg.cfg.Schema != "" {
@@ -57,6 +61,7 @@ func (pg *Migrator) Init(ctx context.Context) error {
 	}
 
 	query += fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
+	id         BIGSERIAL PRIMARY KEY,
 	version    BIGINT NOT NULL,
 	created_at TIMESTAMP WITH TIME ZONE NOT NULL
 );`, pg.cfg.tableName)
@@ -65,7 +70,7 @@ func (pg *Migrator) Init(ctx context.Context) error {
 	return err
 }
 
-// Drop is a method from Migrator interface.
+// Drop is a method from [dbump.Migrator] interface.
 func (pg *Migrator) Drop(ctx context.Context) error {
 	query := fmt.Sprintf(`DROP TABLE IF EXISTS %s;`, pg.cfg.tableName)
 
@@ -77,19 +82,19 @@ func (pg *Migrator) Drop(ctx context.Context) error {
 	return err
 }
 
-// LockDB is a method from Migrator interface.
+// LockDB is a method from [dbump.Migrator] interface.
 func (pg *Migrator) LockDB(ctx context.Context) error {
 	_, err := pg.conn.Exec(ctx, "SELECT pg_advisory_lock($1);", pg.cfg.lockNum)
 	return err
 }
 
-// UnlockDB is a method from Migrator interface.
+// UnlockDB is a method from [dbump.Migrator] interface.
 func (pg *Migrator) UnlockDB(ctx context.Context) error {
 	_, err := pg.conn.Exec(ctx, "SELECT pg_advisory_unlock($1);", pg.cfg.lockNum)
 	return err
 }
 
-// Version is a method from Migrator interface.
+// Version is a method from [dbump.Migrator] interface.
 func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 	query := fmt.Sprintf("SELECT version FROM %s ORDER BY created_at DESC LIMIT 1;", pg.cfg.tableName)
 	row := pg.conn.QueryRow(ctx, query)
@@ -100,7 +105,7 @@ func (pg *Migrator) Version(ctx context.Context) (version int, err error) {
 	return version, err
 }
 
-// Version is a method from Migrator interface.
+// DoStep is a method from [dbump.Migrator] interface.
 func (pg *Migrator) DoStep(ctx context.Context, step dbump.Step) error {
 	if step.DisableTx {
 		if _, err := pg.conn.Exec(ctx, step.Query); err != nil {
@@ -111,14 +116,25 @@ func (pg *Migrator) DoStep(ctx context.Context, step dbump.Step) error {
 		return err
 	}
 
-	return pgx.BeginFunc(ctx, pg.conn, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, step.Query); err != nil {
-			return err
-		}
-		query := fmt.Sprintf("INSERT INTO %s (version, created_at) VALUES ($1, NOW());", pg.cfg.tableName)
-		_, err := tx.Exec(ctx, query, step.Version)
+	tx, err := pg.conn.Begin(ctx)
+	if err != nil {
 		return err
-	})
+	}
+
+	if _, err := tx.Exec(ctx, step.Query); err != nil {
+		return err
+	}
+
+	query := fmt.Sprintf("INSERT INTO %s (version, created_at) VALUES ($1, NOW());", pg.cfg.tableName)
+	if _, err := tx.Exec(ctx, query, step.Version); err != nil {
+		return err
+	}
+
+	// TODO: Rollback
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 func hashTableName(s string) int64 {
