@@ -54,7 +54,7 @@ func NewMigrator(conn *sql.DB, cfg Config) *Migrator {
 // Init is a method from dbump.Migrator interface.
 func (s *Migrator) Init(ctx context.Context) error {
 	query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
-	id         INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+	id         INTEGER PRIMARY KEY,
 	version    INTEGER NOT NULL,
 	created_at TEXT NOT NULL
 );`, s.cfg.tableName)
