@@ -56,7 +56,7 @@ func (s *Migrator) Init(ctx context.Context) error {
 	query := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s (
 	id         INTEGER PRIMARY KEY,
 	version    INTEGER NOT NULL,
-	created_at TEXT NOT NULL
+	created_at DATETIME NOT NULL
 );`, s.cfg.tableName)
 
 	_, err := s.conn.ExecContext(ctx, query)

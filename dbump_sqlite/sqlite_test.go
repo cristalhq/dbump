@@ -13,22 +13,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-var conn *sql.DB
-
-func init() {
-	path := os.Getenv("DBUMP_SQLITE_PATH")
-	if path == "" {
-		path = "./db.sqlitedb" // + time.Now().String()
-	}
-
-	var err error
-	conn, err = sql.Open("sqlite3", path)
-	if err != nil {
-		panic(err)
-	}
-}
-
 func TestSQLite_Simple(t *testing.T) {
+	conn := newTestConn(t)
+
 	m := NewMigrator(conn, Config{})
 	l := dbump.NewSliceLoader([]*dbump.Migration{
 		{
@@ -53,10 +40,12 @@ func TestSQLite_Simple(t *testing.T) {
 		Loader:   l,
 		Mode:     dbump.ModeApplyAll,
 	})
-	failIfErr(t, errRun)
+	mustOK(t, errRun)
 }
 
 func TestNonDefaultSchemaTable(t *testing.T) {
+	conn := newTestConn(t)
+
 	testCases := []struct {
 		name          string
 		schema        string
@@ -105,39 +94,68 @@ func TestNonDefaultSchemaTable(t *testing.T) {
 }
 
 func TestMigrate_ApplyAll(t *testing.T) {
-	newSuite().ApplyAll(t)
+	conn := newTestConn(t)
+	newSuite(conn).ApplyAll(t)
 }
 
 func TestMigrate_ApplyOne(t *testing.T) {
-	newSuite().ApplyOne(t)
+	conn := newTestConn(t)
+	newSuite(conn).ApplyOne(t)
 }
 
 func TestMigrate_ApplyAllWhenFull(t *testing.T) {
-	newSuite().ApplyAllWhenFull(t)
+	conn := newTestConn(t)
+	newSuite(conn).ApplyAllWhenFull(t)
 }
 
 func TestMigrate_RevertOne(t *testing.T) {
-	newSuite().RevertOne(t)
+	conn := newTestConn(t)
+	newSuite(conn).RevertOne(t)
 }
 
 func TestMigrate_RevertAllWhenEmpty(t *testing.T) {
-	newSuite().RevertAllWhenEmpty(t)
+	conn := newTestConn(t)
+	newSuite(conn).RevertAllWhenEmpty(t)
 }
 
 func TestMigrate_RevertAll(t *testing.T) {
-	newSuite().RevertAll(t)
+	conn := newTestConn(t)
+	newSuite(conn).RevertAll(t)
 }
 
 func TestMigrate_Redo(t *testing.T) {
-	newSuite().Redo(t)
+	conn := newTestConn(t)
+	newSuite(conn).Redo(t)
 }
 
 func TestMigrate_Drop(t *testing.T) {
-	// t.Skip()
-	newSuite().Drop(t)
+	conn := newTestConn(t)
+	suite := newSuite(conn)
+	suite.SkipCleanup = true
+	suite.Drop(t)
 }
 
-func newSuite() *tests.MigratorSuite {
+var envPath = os.Getenv("DBUMP_SQLITE_PATH")
+
+func newTestConn(tb testing.TB) *sql.DB {
+	path := "./db.sqlitedb"
+	if envPath != "" {
+		path = envPath
+	}
+
+	// ignore error if it doesn't exist.
+	_ = os.Remove(path)
+
+	conn, err := sql.Open("sqlite3", path)
+	mustOK(tb, err)
+
+	tb.Cleanup(func() {
+		_ = os.Remove(path)
+	})
+	return conn
+}
+
+func newSuite(conn *sql.DB) *tests.MigratorSuite {
 	m := NewMigrator(conn, Config{})
 	suite := tests.NewMigratorSuite(m)
 	suite.ApplyTmpl = "CREATE TABLE %[1]s_%[2]d (id INT);"
@@ -147,7 +165,7 @@ func newSuite() *tests.MigratorSuite {
 	return suite
 }
 
-func failIfErr(tb testing.TB, err error) {
+func mustOK(tb testing.TB, err error) {
 	tb.Helper()
 	if err != nil {
 		tb.Fatal(err)
@@ -159,11 +177,4 @@ func mustEqual(tb testing.TB, got, want interface{}) {
 	if !reflect.DeepEqual(got, want) {
 		tb.Fatalf("\nhave %+v\nwant %+v", got, want)
 	}
-}
-
-func envOrDef(env, def string) string {
-	if val := os.Getenv(env); val != "" {
-		return val
-	}
-	return def
 }

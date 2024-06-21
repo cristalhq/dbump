@@ -15,6 +15,7 @@ type MigratorSuite struct {
 	RevertTmpl   string
 	CleanMigTmpl string
 	CleanTest    string
+	SkipCleanup  bool
 }
 
 func NewMigratorSuite(m dbump.Migrator) *MigratorSuite {
@@ -234,10 +235,15 @@ func (suite *MigratorSuite) genMigrations(tb testing.TB, num int, testname strin
 	}
 
 	tb.Cleanup(func() {
+		if suite.SkipCleanup {
+			return
+		}
+
 		for i := 1; i <= num; i++ {
 			query := fmt.Sprintf(suite.CleanMigTmpl, testname, i)
 			failIfErr(tb, suite.migrator.DoStep(context.Background(), dbump.Step{
-				Query: query,
+				Version: num - i - 1,
+				Query:   query,
 			}))
 		}
 		failIfErr(tb, suite.migrator.DoStep(context.Background(), dbump.Step{
